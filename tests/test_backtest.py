@@ -63,3 +63,44 @@ def test_walk_forward_folds_do_not_overlap():
         train = {d for e in edges[:k] for d in e}
         test = set(edges[k])
         assert not (train & test), "train/test date overlap in walk-forward folds"
+
+
+def test_expand_events_empty_keeps_numeric_dtypes():
+    """Regression (0.2.0): a fold with zero events must return an empty frame
+    with float64 strength. Concatenating an empty object-dtype frame upcasts a
+    sibling frame's strength to object, which crashed scipy's ttest_rel."""
+    from signal_lab.backtest.run_backtest import expand_events
+
+    events = pd.DataFrame(columns=["ticker", "event_date"])
+    sig = expand_events(events, [pd.to_datetime("2026-01-01").date(),
+                                 pd.to_datetime("2026-01-02").date()],
+                        hold_days=5)
+    assert sig.empty
+    assert str(sig["strength"].dtype) == "float64", sig.dtypes
+
+
+def test_run_coerces_object_port_ret_before_ttest():
+    """Regression (0.2.0): run() must survive an object-dtype strength column
+    (as produced by concatenating an empty fold frame) instead of crashing
+    inside scipy's ttest_rel."""
+    prices = _prices()
+    real = pd.DataFrame([{
+        "ticker": "XXX",
+        "asof": pd.to_datetime("2026-01-05").date(),
+        "strength": 1.0,
+    }])
+    empty_object = pd.DataFrame({
+        "ticker": pd.Series(dtype=object),
+        "asof": pd.Series(dtype=object),
+        "strength": pd.Series(dtype=object),
+    })
+    mixed = pd.concat([real, empty_object], ignore_index=True)
+    assert mixed["strength"].dtype == object  # precondition: the hostile input
+    bnh = pd.DataFrame([{
+        "ticker": "XXX",
+        "asof": pd.to_datetime("2026-01-01").date(),
+        "strength": 1.0,
+    }])
+    res = run({"s": mixed, "buy_and_hold": bnh}, prices, cost_bps=0.0)
+    assert not res.empty
+    assert "paired_p" in res.columns

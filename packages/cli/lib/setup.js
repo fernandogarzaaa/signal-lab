@@ -111,7 +111,7 @@ function seedDemo() {
       copied.push(path.relative(PKG_ROOT, dst));
     }
   };
-  for (const name of ['signal_lab.duckdb', 'aliases.csv', 'labels.csv', 'artifacts']) {
+  for (const name of ['signal_lab.duckdb', 'aliases.csv', 'labels.csv', 'edgar', 'artifacts']) {
     copyTree(path.join(SEED_DIR, name), path.join(DATA_DIR, name));
   }
   // Precomputed stage results (from a real run) render visuals instantly.

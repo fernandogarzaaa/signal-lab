@@ -10,6 +10,9 @@ __pycache__/
 # Scoped to root: package data dirs like src/signal_lab/*/data/ must stay committable.
 /data/
 
+# CLI runtime state (populated by `signallab setup` / `signallab seed` at install time)
+/packages/cli/data/
+
 # Node
 node_modules/
 npm-debug.log*
