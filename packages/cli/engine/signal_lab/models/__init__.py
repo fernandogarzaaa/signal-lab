@@ -1,8 +1,15 @@
 """M3: classical sentiment classifier on imbalanced data.
 
-Weak labels: for each news item, next-day abnormal return of its ticker
-(ticker return minus SPY market return). Positive class = top decile of
-abnormal returns; everything else = negative class.
+Weak labels (0.3.0 workstream 1, see signal_lab.models.labels): two schemes.
+
+- ``windowed`` (default): for each news item, cumulative abnormal return of
+  its ticker (ticker return minus market return) over trading days t+1..t+3.
+  Positive class = top decile of abnormal returns; everything else =
+  negative class. Articles only enter the dataset when their ticker-day
+  passes the attention filter (>= 2 distinct articles, or a day busier than
+  75% of that ticker's days).
+- ``baseline`` (the 0.2.0 scheme, kept for comparison): same idea on the
+  next trading day only, no attention filter.
 
 Labeling bias (documented, not hidden):
   1. Price move is not sentiment. A price jump can come from market-wide
@@ -27,16 +34,23 @@ import numpy as np
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (average_precision_score, f1_score,
-                             precision_recall_curve, precision_score,
-                             recall_score)
+from sklearn.metrics import (
+    average_precision_score,
+    f1_score,
+    precision_recall_curve,
+    precision_score,
+    recall_score,
+)
 from sklearn.utils import resample
 
-from signal_lab.models.lexicon import (LEXICON_FEATURE_NAMES,
-                                       lexicon_feature_matrix)
+from signal_lab.models.lexicon import (
+    LEXICON_FEATURE_NAMES as LEXICON_FEATURE_NAMES,
+)
+from signal_lab.models.lexicon import lexicon_feature_matrix
 
 try:
-    from scipy.sparse import csr_matrix, hstack as sparse_hstack
+    from scipy.sparse import csr_matrix
+    from scipy.sparse import hstack as sparse_hstack
 except ImportError:  # pragma: no cover - scipy is a hard dependency
     csr_matrix = None
     sparse_hstack = None
@@ -68,11 +82,17 @@ def oversample_minority(X, y, random_state: int = RANDOM_STATE):
     for c in classes:
         n_missing = target - (y == c).sum()
         if n_missing > 0:
-            Xi, yi = resample(X[y == c], y[y == c], replace=True,
-                              n_samples=n_missing, random_state=random_state)
+            Xi, yi = resample(
+                X[y == c],
+                y[y == c],
+                replace=True,
+                n_samples=n_missing,
+                random_state=random_state,
+            )
             Xs.append(Xi)
             ys.append(yi)
     from scipy.sparse import vstack as sp_vstack
+
     Xb = sp_vstack(Xs) if hasattr(X, "tocsr") else np.vstack(Xs)
     return Xb, np.concatenate(ys)
 
@@ -137,8 +157,9 @@ def train(df: pd.DataFrame, text_col: str = "title"):
     y = df["label"].astype(int).values
     tr_idx, te_idx = temporal_split(pd.to_datetime(df["published_at"]))
 
-    vec = TfidfVectorizer(max_features=5000, ngram_range=(1, 2),
-                          stop_words="english", sublinear_tf=True)
+    vec = TfidfVectorizer(
+        max_features=5000, ngram_range=(1, 2), stop_words="english", sublinear_tf=True
+    )
     vec.fit(texts.iloc[tr_idx])
     Xtr = featurize(texts.iloc[tr_idx], vec)
     Xte = featurize(texts.iloc[te_idx], vec)
@@ -149,11 +170,17 @@ def train(df: pd.DataFrame, text_col: str = "title"):
     reports: list[ModelReport] = []
 
     # 0. Majority-class baseline: PR-AUC of a constant scorer equals pos rate.
-    reports.append(ModelReport(
-        name="majority_baseline", precision=pos_rate, recall=1.0,
-        f1=2 * pos_rate / (1 + pos_rate) if pos_rate else 0.0,
-        pr_auc=pos_rate, accuracy=float(1 - pos_rate),
-        extras={"note": "always predicts the majority class"}))
+    reports.append(
+        ModelReport(
+            name="majority_baseline",
+            precision=pos_rate,
+            recall=1.0,
+            f1=2 * pos_rate / (1 + pos_rate) if pos_rate else 0.0,
+            pr_auc=pos_rate,
+            accuracy=float(1 - pos_rate),
+            extras={"note": "always predicts the majority class"},
+        )
+    )
 
     # 1. Logistic regression, no imbalance handling.
     lr_plain = LogisticRegression(max_iter=1000, random_state=RANDOM_STATE)
@@ -162,8 +189,9 @@ def train(df: pd.DataFrame, text_col: str = "title"):
     reports.append(_metrics("logreg_plain", yte, lr_plain.predict_proba(Xte)[:, 1]))
 
     # 2. Logistic regression, class_weight='balanced'.
-    lr_bal = LogisticRegression(max_iter=1000, class_weight="balanced",
-                                random_state=RANDOM_STATE)
+    lr_bal = LogisticRegression(
+        max_iter=1000, class_weight="balanced", random_state=RANDOM_STATE
+    )
     lr_bal.fit(Xtr, ytr)
     models["logreg_balanced"] = lr_bal
     reports.append(_metrics("logreg_balanced", yte, lr_bal.predict_proba(Xte)[:, 1]))
@@ -180,33 +208,56 @@ def train(df: pd.DataFrame, text_col: str = "title"):
         import lightgbm as lgb
 
         neg, pos = (ytr == 0).sum(), (ytr == 1).sum()
-        gbm = lgb.LGBMClassifier(n_estimators=300, learning_rate=0.05,
-                                 scale_pos_weight=neg / max(pos, 1),
-                                 random_state=RANDOM_STATE, verbose=-1)
+        gbm = lgb.LGBMClassifier(
+            n_estimators=300,
+            learning_rate=0.05,
+            scale_pos_weight=neg / max(pos, 1),
+            random_state=RANDOM_STATE,
+            verbose=-1,
+        )
         gbm.fit(Xtr, ytr)
         models["lightgbm_balanced"] = gbm
         reports.append(_metrics("lightgbm_balanced", yte, gbm.predict_proba(Xte)[:, 1]))
-        tuned = True
-    except Exception as exc:  # LightGBM optional; document the fallback
-        reports.append(ModelReport(name="lightgbm_balanced", precision=float("nan"),
-                                   recall=float("nan"), f1=float("nan"),
-                                   pr_auc=float("nan"), accuracy=float("nan"),
-                                   extras={"skipped": f"lightgbm unavailable: {exc}"}))
-        tuned = False
+    except Exception as exc:  # noqa: BLE001 - LightGBM optional; document the fallback
+        reports.append(
+            ModelReport(
+                name="lightgbm_balanced",
+                precision=float("nan"),
+                recall=float("nan"),
+                f1=float("nan"),
+                pr_auc=float("nan"),
+                accuracy=float("nan"),
+                extras={"skipped": f"lightgbm unavailable: {exc}"},
+            )
+        )
 
     # 5. Threshold tuning on the best linear model (tune on train, eval on test).
     train_scores = lr_bal.predict_proba(Xtr)[:, 1]
     thr = tune_threshold(ytr, train_scores)
     models["logreg_balanced_tuned"] = lr_bal
-    reports.append(_metrics("logreg_balanced_tuned", yte,
-                            lr_bal.predict_proba(Xte)[:, 1], threshold=thr,
-                            extras={"threshold_tuned_on": "train"}))
+    reports.append(
+        _metrics(
+            "logreg_balanced_tuned",
+            yte,
+            lr_bal.predict_proba(Xte)[:, 1],
+            threshold=thr,
+            extras={"threshold_tuned_on": "train"},
+        )
+    )
 
-    return {"models": models, "reports": reports, "vectorizer": vec,
-            "positive_rate": pos_rate, "n_train": len(tr_idx), "n_test": len(te_idx)}
+    return {
+        "models": models,
+        "reports": reports,
+        "vectorizer": vec,
+        "positive_rate": pos_rate,
+        "n_train": len(tr_idx),
+        "n_test": len(te_idx),
+    }
 
 
-def predict(model, texts: list[str], vectorizer=None, threshold: float = 0.5) -> list[float]:
+def predict(
+    model, texts: list[str], vectorizer=None, threshold: float = 0.5
+) -> list[float]:
     """Return P(market-moving-positive) per text. Vectorizer required unless
     the model was trained outside train() and handles raw text itself."""
     if vectorizer is None:
@@ -216,9 +267,16 @@ def predict(model, texts: list[str], vectorizer=None, threshold: float = 0.5) ->
 
 
 def report_table(result: dict) -> pd.DataFrame:
-    rows = [{
-        "model": r.name, "precision": round(r.precision, 3), "recall": round(r.recall, 3),
-        "f1": round(r.f1, 3), "pr_auc": round(r.pr_auc, 3),
-        "accuracy": round(r.accuracy, 3), "threshold": round(r.threshold, 3),
-    } for r in result["reports"]]
+    rows = [
+        {
+            "model": r.name,
+            "precision": round(r.precision, 3),
+            "recall": round(r.recall, 3),
+            "f1": round(r.f1, 3),
+            "pr_auc": round(r.pr_auc, 3),
+            "accuracy": round(r.accuracy, 3),
+            "threshold": round(r.threshold, 3),
+        }
+        for r in result["reports"]
+    ]
     return pd.DataFrame(rows)
