@@ -79,6 +79,66 @@ labeling with a configurable pipeline (`signal_lab.models.labels`):
   "cost" are not negative in 10-Ks); LM was built from 10-K filings and
   encodes that domain knowledge.
 
+## FinBERT text representation (0.3.0 workstream 2)
+
+ProsusAI/finbert is used as a *frozen* feature extractor: one 768-dim
+vector per article (CLS pooling by default, attention-masked mean pooling
+on request; eval mode under `torch.no_grad()`, no fine-tuning).
+`signal_lab.models.embeddings` compares it against the 0.2.0
+representation in a strict ablation: same articles, same temporal
+train/test split, same classifier family (class-weighted logistic
+regression, threshold 0.5) in every arm, so differences measure the
+representation, not the protocol.
+
+**Ablation (694 labeled rows, 485 train / 209 test, positive rate 10.2%,
+windowed 0.3.0 labels):**
+
+| Arm | PR-AUC | F1 | Precision | Recall |
+|-----|--------|----|-----------|--------|
+| TF-IDF + LM lexicon | 0.1395 | 0.0816 | 0.1176 | 0.0625 |
+| FinBERT-only | 0.1643 | 0.0444 | 0.0769 | 0.0312 |
+| Combined (TF-IDF + lexicon + FinBERT) | 0.1564 | 0.0000 | 0.0000 | 0.0000 |
+
+Chance level is ~0.10 (the positive rate). The FinBERT-only arm gains a
+modest +0.025 PR-AUC over TF-IDF+lexicon but scores a lower F1 at the
+fixed 0.5 threshold; the combined arm's F1 collapses to 0.000 because
+with only 485 training rows and ~1,800 features the classifier predicts
+no positives at threshold 0.5. All three arms sit near chance, consistent
+with the 0.2.0 finding that data scale, not features, is the binding
+constraint: a 768-dim frozen extractor cannot rescue 694 noisy labels,
+and the honest verdict is that FinBERT does not buy a meaningful signal
+on this corpus.
+
+**Optional-dependency design.** torch + transformers are NOT hard
+requirements: they are absent from `requirements.txt` and never imported
+at module scope (only lazily inside the extractor). Behavior matrix:
+
+- Deps missing: stage 3 logs `[m3] FinBERT unavailable (torch not
+  installed); finbert/combined arms skipped, falling back to
+  TF-IDF+lexicon`, and the `finbert_ablation` JSON block reports
+  `"available": false` with the reason. The TF-IDF arm still reports, so
+  the block is never empty.
+- Deps present, weights never downloaded: the opt-in `--finbert` run
+  downloads ~440MB of `ProsusAI/finbert` weights into the standard
+  Hugging Face cache (one loud log line first); a failed download
+  (offline, hub outage) falls back the same clean way.
+- The seeded demo and `signallab doctor` work fully offline. `doctor`
+  gained a `finbert embeddings (optional)` check reporting installed /
+  weights-cached / unavailable; the check passes whenever the probe runs,
+  since missing FinBERT is a normal, supported state.
+
+**Caching.** Per-article embeddings are cached as `.npy` files under
+`~/.cache/signal_lab/finbert` (override with `SIGNAL_LAB_FINBERT_CACHE`),
+keyed by SHA-256 of the whitespace-normalized text, or by an explicit key
+such as the article URL; re-runs never recompute. The ablation itself is
+opt-in (`--finbert` flag or `SIGNAL_LAB_FINBERT=1`), so nothing downloads
+unannounced.
+
+**Stage-3 JSON contract.** Every run emits a `finbert_ablation` block
+(`available`, `model`, `embedding_dim`, `pooling`, `n_train`, `n_test`,
+`positive_rate`, `arms`, plus `reason`/`cache_dir` when applicable). The
+`label_config` block from workstream 1 is untouched.
+
 ## Evaluation (honest)
 
 Metric of record is **PR-AUC** (area under the precision-recall curve):

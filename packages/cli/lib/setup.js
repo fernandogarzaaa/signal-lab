@@ -155,6 +155,30 @@ function doctor() {
   } catch (e) { dataDetail = e.message; }
   checks.push({ name: 'data dir writable', pass: dataOk, detail: dataDetail });
 
+  // 0.3.0 workstream 2: FinBERT is an optional dependency (torch +
+  // transformers + ~440MB weights). The check passes when the probe itself
+  // runs; the detail reports availability. Missing FinBERT is normal: the
+  // pipeline falls back to TF-IDF+lexicon.
+  let finbertRan = false, finbertDetail = 'venv missing';
+  if (venvOk) {
+    try {
+      const r = spawnSync(venvPython(), ['-c',
+        'import json; from signal_lab.models.embeddings import availability_report; ' +
+        'print(json.dumps(availability_report()))'],
+        { encoding: 'utf8', env: { ...process.env, PYTHONPATH: ENGINE_DIR } });
+      if (r.status === 0) {
+        finbertRan = true;
+        const rep = JSON.parse((r.stdout || '').trim());
+        finbertDetail = rep.available
+          ? `available (${rep.model}, weights cached)`
+          : `not installed — ${rep.detail} (TF-IDF+lexicon fallback active)`;
+      } else {
+        finbertDetail = 'probe failed: ' + ((r.stderr || '').trim().split('\n').slice(-2).join(' '));
+      }
+    } catch (e) { finbertDetail = e.message; }
+  }
+  checks.push({ name: 'finbert embeddings (optional)', pass: finbertRan, detail: finbertDetail });
+
   return checks;
 }
 

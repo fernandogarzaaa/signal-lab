@@ -256,13 +256,29 @@ def train(df: pd.DataFrame, text_col: str = "title"):
 
 
 def predict(
-    model, texts: list[str], vectorizer=None, threshold: float = 0.5
+    model,
+    texts: list[str],
+    vectorizer=None,
+    threshold: float = 0.5,
+    *,
+    feature_builder=None,
 ) -> list[float]:
     """Return P(market-moving-positive) per text. Vectorizer required unless
-    the model was trained outside train() and handles raw text itself."""
+    the model was trained outside train() and handles raw text itself.
+
+    ``feature_builder`` optionally overrides the feature construction:
+    a callable ``(texts, vectorizer) -> feature matrix`` such as one of the
+    entries in ``build_and_train.FEATURE_BUILDERS`` (e.g. the 0.3.0
+    workstream-2 FinBERT builders). Defaults to the shared ``featurize()``,
+    so every existing call site is unaffected.
+    """
     if vectorizer is None:
         raise ValueError("predict needs the fitted vectorizer from train()")
-    X = featurize(texts, vectorizer)
+    X = (
+        feature_builder(texts, vectorizer)
+        if feature_builder is not None
+        else featurize(texts, vectorizer)
+    )
     return [float(p) for p in model.predict_proba(X)[:, 1]]
 
 
