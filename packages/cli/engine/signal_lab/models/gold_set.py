@@ -245,6 +245,67 @@ def cmd_agree(args, log=print) -> dict:
     return report
 
 
+def cmd_label(args, log=print) -> dict:
+    """Interactively label gold-set items, blinded to weak labels.
+
+    Walks through every item with human_label=None, showing title/snippet/
+    ticker/date but NEVER the weak label. Saves after every judgment so
+    quitting or crashing loses nothing. Accepts '1 [note]' / '0 [note]' so
+    an optional note can ride along with the label.
+    """
+    path = Path(args.in_path)
+    payload = json.loads(path.read_text())
+    if payload.get("version") != GOLD_VERSION:
+        raise ValueError(
+            f"unsupported gold-set version {payload.get('version')!r}; "
+            f"expected {GOLD_VERSION}"
+        )
+    items = payload["items"]
+    todo = [it for it in items if it.get("human_label") is None]
+    done = len(items) - len(todo)
+    log(f"[gold] {done}/{len(items)} already labeled; {len(todo)} remaining.")
+    log("[gold] keys: 1=positive  0=negative  s=skip  q=save+quit")
+    log("[gold] append a note after the digit, e.g. '1 earnings beat'.")
+    labeled = 0
+    try:
+        for idx, it in enumerate(todo):
+            log("")
+            log(f"--- item {done + labeled + 1}/{len(items)} "
+                f"({it.get('ticker')}, {it.get('published_at', '')[:10]}) ---")
+            log(f"TITLE: {it.get('title', '')}")
+            snippet = (it.get("body_snippet") or "")[:600]
+            log(f"TEXT: {snippet}")
+            while True:
+                try:
+                    raw = input("[1/0/s/q] ").strip()
+                except EOFError:
+                    raw = "q"
+                if not raw:
+                    continue
+                parts = raw.split(None, 1)
+                key = parts[0].lower()
+                note = parts[1] if len(parts) > 1 else ""
+                if key in ("1", "0"):
+                    it["human_label"] = int(key)
+                    if note:
+                        it["human_note"] = note
+                    labeled += 1
+                    path.write_text(json.dumps(sanitize_json(payload), indent=2))
+                    break
+                if key == "s":
+                    break
+                if key == "q":
+                    raise KeyboardInterrupt
+                log("  use 1, 0, s, or q")
+    except KeyboardInterrupt:
+        log("")
+    path.write_text(json.dumps(sanitize_json(payload), indent=2))
+    log(f"[gold] saved: {labeled} newly labeled, "
+        f"{done + labeled}/{len(items)} total -> {path}")
+    return {"labeled_now": labeled, "labeled_total": done + labeled,
+            "n_items": len(items)}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Gold-set sampling and agreement")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -263,6 +324,14 @@ def main() -> None:
         "--db", default=None, help="DuckDB path override (default: the stage-3 DB)"
     )
     add_label_args(sp)
+
+    lb = sub.add_parser("label", help="interactively label items (blinded)")
+    lb.add_argument(
+        "--in",
+        dest="in_path",
+        required=True,
+        help="gold-set JSON file from the sample command",
+    )
 
     ag = sub.add_parser("agree", help="report weak-vs-human agreement")
     ag.add_argument(
@@ -283,6 +352,8 @@ def main() -> None:
     )
     if args.cmd == "sample":
         cmd_sample(args, log=log)
+    elif args.cmd == "label":
+        cmd_label(args, log=log)
     else:
         cmd_agree(args, log=log)
 

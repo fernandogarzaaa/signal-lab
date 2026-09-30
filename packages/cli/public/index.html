@@ -371,11 +371,12 @@ async function renderDiagnostics(){
                      title:{display:true,text:'PR-AUC',color:CH.color}}}}});
       const agg = wf.aggregate||{};
       const ci = (agg.pr_auc&&agg.pr_auc.ci95)?`95% CI [${agg.pr_auc.ci95[0]}, ${agg.pr_auc.ci95[1]}]`:'';
+      const repr = wf.representation ? ` · repr ${wf.representation}` : '';
       $('wftable-wrap').innerHTML =
         `<table><tr><th>fold</th><th>test period</th><th>train/test</th><th>PR-AUC</th><th>F1</th></tr>`+
         folds.map(f=>`<tr><td>${f.fold}</td><td>${(f.test_start||'').slice(0,10)} → ${(f.test_end||'').slice(0,10)}</td>`+
           `<td>${f.n_train}/${f.n_test}</td><td>${f.pr_auc}</td><td>${f.f1}</td></tr>`).join('')+`</table>`+
-        `<div class="summary">mean PR-AUC ${agg.pr_auc?agg.pr_auc.mean:'?'} ± ${agg.pr_auc?agg.pr_auc.std:'?'} · ${ci}</div>`+
+        `<div class="summary">mean PR-AUC ${agg.pr_auc?agg.pr_auc.mean:'?'} ± ${agg.pr_auc?agg.pr_auc.std:'?'} · ${ci}${repr}</div>`+
         ((wf.skipped_folds||[]).map(s=>`<div class="empty">fold ${s.fold} skipped: ${s.reason}</div>`).join(''));
     } else { $('wftable-wrap').innerHTML = empty('No folds yet.'); }
   }catch(e){
