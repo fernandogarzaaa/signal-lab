@@ -24,6 +24,12 @@ Labeling bias (documented, not hidden):
 
 Metrics: precision, recall, F1, PR-AUC. Accuracy is reported only to show
 why it lies on imbalanced data.
+
+Context features (0.3.0 workstream 3): 7 dense market-context features
+(volatility regime, momentum, sector-relative strength, article metadata)
+can be appended via the ``dense_extra`` argument of featurize()/train()/
+predict(); see signal_lab.models.context_features. Every one is computed
+from data strictly before each article's publish time (no leakage).
 """
 
 from __future__ import annotations
@@ -131,8 +137,14 @@ def tune_threshold(y_true, scores) -> float:
     return float(thr[best]) if best < len(thr) else 0.5
 
 
-def featurize(texts, vectorizer):
-    """Full feature matrix: TF-IDF (sparse) + 8 LM lexicon features (dense).
+def featurize(texts, vectorizer, dense_extra=None):
+    """Full feature matrix: TF-IDF (sparse) + 8 LM lexicon features (dense)
+    + optional extra dense columns.
+
+    The extra slot carries 0.3.0 workstream 3 market-context features (and
+    is the same slot workstream 2 FinBERT embeddings will use): pass a
+    DataFrame or ndarray with one row per text, in the same order; its
+    column names flow into feature_names() for importance reporting.
 
     Used everywhere a fitted vectorizer transforms raw text (train/test
     split, predict(), artifact scoring) so the model always sees the same
@@ -140,14 +152,51 @@ def featurize(texts, vectorizer):
     """
     X_tfidf = vectorizer.transform(list(texts))
     X_lex = csr_matrix(lexicon_feature_matrix(texts))
-    return sparse_hstack([X_tfidf, X_lex], format="csr")
+    parts = [X_tfidf, X_lex]
+    if dense_extra is not None:
+        extra = np.asarray(
+            dense_extra.to_numpy(dtype=float)
+            if isinstance(dense_extra, pd.DataFrame)
+            else dense_extra,
+            dtype=float,
+        )
+        if extra.shape[0] != X_tfidf.shape[0]:
+            raise ValueError(
+                f"dense_extra has {extra.shape[0]} rows for {X_tfidf.shape[0]} texts"
+            )
+        if np.isnan(extra).any():
+            raise ValueError("dense_extra contains NaN; drop or impute first")
+        parts.append(csr_matrix(extra))
+    return sparse_hstack(parts, format="csr")
 
 
-def train(df: pd.DataFrame, text_col: str = "title"):
+def feature_names(vectorizer, dense_names=()):
+    """Column names of featurize() output, in order: TF-IDF terms, then the
+    8 LM lexicon names, then dense_names (context/embedding feature names)."""
+    return (
+        list(vectorizer.get_feature_names_out())
+        + list(LEXICON_FEATURE_NAMES)
+        + [str(n) for n in dense_names]
+    )
+
+
+def _take_rows(dense_extra, idx):
+    """Rows of dense_extra at integer positions idx (None passes through)."""
+    if dense_extra is None:
+        return None
+    if isinstance(dense_extra, pd.DataFrame):
+        return dense_extra.iloc[idx]
+    return np.asarray(dense_extra)[idx]
+
+
+def train(df: pd.DataFrame, text_col: str = "title", dense_extra=None):
     """Fit baseline + challengers. Returns {'models': {...}, 'reports': [...],
     'vectorizer': vec, 'positive_rate': float} on a temporal held-out split.
 
     df must have columns: published_at (datetime), text_col(s), label (0/1).
+    dense_extra: optional DataFrame/ndarray of extra dense features with one
+    row per df row, in df order (0.3.0 WS3 market-context features); it is
+    split with the same temporal indices as the text matrix.
     """
     df = df.dropna(subset=[text_col, "label", "published_at"]).reset_index(drop=True)
     if text_col == "title":
@@ -161,8 +210,12 @@ def train(df: pd.DataFrame, text_col: str = "title"):
         max_features=5000, ngram_range=(1, 2), stop_words="english", sublinear_tf=True
     )
     vec.fit(texts.iloc[tr_idx])
-    Xtr = featurize(texts.iloc[tr_idx], vec)
-    Xte = featurize(texts.iloc[te_idx], vec)
+    Xtr = featurize(
+        texts.iloc[tr_idx], vec, dense_extra=_take_rows(dense_extra, tr_idx)
+    )
+    Xte = featurize(
+        texts.iloc[te_idx], vec, dense_extra=_take_rows(dense_extra, te_idx)
+    )
     ytr, yte = y[tr_idx], y[te_idx]
     pos_rate = float(y.mean())
 
@@ -262,6 +315,7 @@ def predict(
     threshold: float = 0.5,
     *,
     feature_builder=None,
+    dense_extra=None,
 ) -> list[float]:
     """Return P(market-moving-positive) per text. Vectorizer required unless
     the model was trained outside train() and handles raw text itself.
@@ -271,13 +325,16 @@ def predict(
     entries in ``build_and_train.FEATURE_BUILDERS`` (e.g. the 0.3.0
     workstream-2 FinBERT builders). Defaults to the shared ``featurize()``,
     so every existing call site is unaffected.
-    """
+
+    ``dense_extra`` is passed through to ``featurize()`` when no
+    ``feature_builder`` is given (0.3.0 workstream-3 market-context features);
+    it must match the extra features the model was trained with."""
     if vectorizer is None:
         raise ValueError("predict needs the fitted vectorizer from train()")
     X = (
         feature_builder(texts, vectorizer)
         if feature_builder is not None
-        else featurize(texts, vectorizer)
+        else featurize(texts, vectorizer, dense_extra=dense_extra)
     )
     return [float(p) for p in model.predict_proba(X)[:, 1]]
 
