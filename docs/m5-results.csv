@@ -1,4 +1,4 @@
 strategy,n_days,total_return,sharpe,max_drawdown,paired_t,paired_p,sharpe_diff_ci95
-sentiment_momentum,61,0.0,0.0,0.0,-0.189,0.8511,"[-3.57, 4.88]"
+sentiment_momentum,61,0.002,1.165,0.0013,-0.115,0.9091,"[-4.88, 6.01]"
 buy_and_hold,61,0.0047,0.383,0.0182,,,
-random_entry,61,0.0,0.0,0.0,-0.189,0.8511,"[-3.57, 4.88]"
+random_entry,61,0.0024,2.315,0.0009,-0.097,0.9227,"[-4.14, 8.25]"
