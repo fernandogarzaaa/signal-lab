@@ -1,14 +1,22 @@
 """Build the M3 weak-label dataset and train the sentiment classifier.
 
 Dataset: each news article -> (text, ticker, published_date, label) where
-label = 1 if the ticker's next-trading-day abnormal return (vs SPY) lands in
-the top decile, else 0. See models.__doc__ for the documented labeling bias.
+the label comes from the configured weak-labeling scheme in
+``signal_lab.models.labels``:
+
+- ``windowed`` (0.3.0 default): 1 if the ticker's cumulative abnormal
+  return vs the market over trading days t+1..t+window_days lands in the
+  top decile, else 0; articles only survive the attention filter when
+  their ticker-day carried enough news presence.
+- ``baseline`` (the 0.2.0 scheme): 1 if the ticker's next-trading-day
+  abnormal return vs SPY lands in the top decile, else 0. Kept so old vs
+  new labeling stays measurable.
 
 Saves:
   data/artifacts/vectorizer.pkl, model.pkl (joblib)
   data/artifacts/scored_news.csv (url, ticker, published_at, proba for M4/M6)
 
-Usage: python -m signal_lab.models.build_and_train
+Usage: python -m signal_lab.models.run [--label-scheme windowed|baseline ...]
 """
 
 from __future__ import annotations
@@ -17,27 +25,22 @@ from pathlib import Path
 
 import duckdb
 import joblib
-import numpy as np
 import pandas as pd
 
 from signal_lab.ingest import DB_PATH, fetch_prices, store_prices
 from signal_lab.models import featurize, make_text, report_table, train
+from signal_lab.models.labels import LabelConfig, build_labels
 from signal_lab.nlp import extract_baseline
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ART = REPO_ROOT / "data" / "artifacts"
 
 
-def _next_day_returns(prices: pd.DataFrame) -> pd.DataFrame:
-    """Per (ticker, date): next trading day's close-to-close return."""
-    p = prices.sort_values(["ticker", "date"]).copy()
-    p["next_date"] = p.groupby("ticker")["date"].shift(-1)
-    p["next_close"] = p.groupby("ticker")["close"].shift(-1)
-    p["next_ret"] = p["next_close"] / p["close"] - 1
-    return p[["ticker", "date", "next_ret"]].dropna()
-
-
-def build_dataset(log=print) -> pd.DataFrame:
+def build_dataset(
+    log=print, label_cfg: LabelConfig | None = None
+) -> tuple[pd.DataFrame, dict]:
+    """Build the labeled article frame. Returns (df, label_config block)."""
+    label_cfg = (label_cfg or LabelConfig()).validated()
     con = duckdb.connect(DB_PATH, read_only=True)
     news = con.execute(
         "SELECT url, title, body_snippet, published_at FROM news_raw WHERE title <> ''"
@@ -46,13 +49,16 @@ def build_dataset(log=print) -> pd.DataFrame:
     con.close()
     prices["date"] = pd.to_datetime(prices["date"]).dt.date
 
-    # Ensure a market benchmark exists. (Date strings must be plain
+    # Ensure the market benchmark exists. (Date strings must be plain
     # YYYY-MM-DD: yfinance rejects datetime strings with a time component.)
-    if "SPY" not in set(prices["ticker"]):
-        log("[m3] fetching SPY benchmark prices")
-        spy = fetch_prices(["SPY"], prices["date"].min().isoformat(),
-                           prices["date"].max().isoformat())
-        store_prices(spy)
+    if label_cfg.benchmark not in set(prices["ticker"]):
+        log(f"[m3] fetching {label_cfg.benchmark} benchmark prices")
+        bench = fetch_prices(
+            [label_cfg.benchmark],
+            prices["date"].min().isoformat(),
+            prices["date"].max().isoformat(),
+        )
+        store_prices(bench)
         con = duckdb.connect(DB_PATH, read_only=True)
         prices = con.execute("SELECT ticker, date, close FROM prices_daily").fetchdf()
         con.close()
@@ -64,8 +70,9 @@ def build_dataset(log=print) -> pd.DataFrame:
     # Match on title + snippet: GDELT often returns the company mention in
     # the body rather than the headline.
     tickers, dropped = [], 0
-    news["text"] = (news["title"].fillna("") + " " +
-                    news["body_snippet"].fillna("")).str.strip()
+    news["text"] = (
+        news["title"].fillna("") + " " + news["body_snippet"].fillna("")
+    ).str.strip()
     for text in news["text"]:
         hits = extract_baseline(text)
         if hits:
@@ -77,48 +84,49 @@ def build_dataset(log=print) -> pd.DataFrame:
     news = news.dropna(subset=["ticker"]).reset_index(drop=True)
     log(f"[m3] articles with a ticker: {len(news)} (dropped {dropped} with none)")
 
-    nxt = _next_day_returns(prices)
-    spy_ret = nxt[nxt.ticker == "SPY"][["date", "next_ret"]].rename(
-        columns={"next_ret": "mkt_ret"})
-    stock = nxt[nxt.ticker != "SPY"]
-    df = news.merge(stock[["ticker", "date", "next_ret"]],
-                    left_on=["ticker", "pub_date"], right_on=["ticker", "date"],
-                    how="left")
-    df = df.merge(spy_ret, left_on="pub_date", right_on="date", how="left",
-                  suffixes=("", "_mkt"))
-    df = df.dropna(subset=["next_ret"]).reset_index(drop=True)
-    # Fallback: universe equal-weight mean when SPY is missing that day.
-    if df["mkt_ret"].isna().any():
-        umean = stock.groupby("date")["next_ret"].mean().rename("umean")
-        df = df.merge(umean, left_on="pub_date", right_index=True, how="left")
-        df["mkt_ret"] = df["mkt_ret"].fillna(df["umean"])
-    df["abn_ret"] = df["next_ret"] - df["mkt_ret"]
-    if df.empty:
-        raise ValueError(
-            "[m3] no labeled rows: none of the news articles could be matched "
-            "to a next-trading-day price (articles may be newer than the "
-            "latest prices, or entity extraction found no tickers). "
-            "Ingest an older news window before training.")
-    cutoff = df["abn_ret"].quantile(0.90)
-    df["label"] = (df["abn_ret"] >= cutoff).astype(int)
-    log(f"[m3] labeled rows: {len(df)}, positive rate: {df['label'].mean():.3f}, "
-          f"top-decile cutoff: {cutoff:+.4f}")
-    return df[["url", "text", "ticker", "published_at", "pub_date",
-               "next_ret", "mkt_ret", "abn_ret", "label"]]
+    labeled, label_block = build_labels(news, prices, label_cfg)
+    log(
+        f"[m3] scheme={label_block['scheme']} window={label_block['window_days']}d "
+        f"attention={label_block['attention']['enabled']} "
+        f"labeled rows: {label_block['n_labeled']}, "
+        f"positive rate: {label_block['positive_rate']:.3f}, "
+        f"top-decile cutoff: {label_block['cutoff']:+.4f}"
+    )
+    labeled["text"] = news.set_index("url").loc[labeled["url"], "text"].values
+    cols = [
+        "url",
+        "text",
+        "ticker",
+        "published_at",
+        "pub_date",
+        "fwd_days",
+        "n_articles",
+        "ticker_fwd_ret",
+        "mkt_fwd_ret",
+        "abn_ret",
+        "label",
+    ]
+    return labeled[cols].reset_index(drop=True), label_block
 
 
-def run_pipeline(log=print) -> dict:
-    """Build dataset, train, persist artifacts. Returns the train() result."""
+def run_pipeline(log=print, label_cfg: LabelConfig | None = None) -> dict:
+    """Build dataset, train, persist artifacts. Returns the train() result,
+    with a 'label_config' block describing the labeling used."""
+    label_cfg = (label_cfg or LabelConfig()).validated()
     ART.mkdir(parents=True, exist_ok=True)
-    df = build_dataset(log=log)
+    df, label_block = build_dataset(log=log, label_cfg=label_cfg)
     result = train(df, text_col="text")
     table = report_table(result)
     log(table.to_string(index=False))
-    log(f"n_train={result['n_train']} n_test={result['n_test']} "
-        f"positive_rate={result['positive_rate']:.3f}")
+    log(
+        f"n_train={result['n_train']} n_test={result['n_test']} "
+        f"positive_rate={result['positive_rate']:.3f}"
+    )
 
     # Persist the best model (highest test PR-AUC among fitted models).
-    scored = [(r.pr_auc, r.name) for r in result["reports"] if r.name in result["models"]]
+    scored = [
+        (r.pr_auc, r.name) for r in result["reports"] if r.name in result["models"]
+    ]
     best_name = max(scored)[1]
     joblib.dump(result["vectorizer"], ART / "vectorizer.pkl")
     joblib.dump(result["models"][best_name], ART / "model.pkl")
@@ -134,6 +142,7 @@ def run_pipeline(log=print) -> dict:
     scored_df.to_csv(ART / "scored_news.csv", index=False)
     log(f"[m3] scored {len(scored_df)} articles -> {ART / 'scored_news.csv'}")
     result["best_model"] = best_name
+    result["label_config"] = label_block
     return result
 
 
