@@ -318,7 +318,15 @@ def build_context_features(
             out.loc[out.index[idx], "ctx_mom5"].to_numpy() - mom5[leg_pos[leg_ok]]
         )
 
-    # Article metadata: known at publish time by construction.
+    # A missing benchmark leg is a missing feature value, not a missing
+    # observation: neutralize to 0.0 (no measured sector-relative signal)
+    # instead of dropping the article. Dropping would silently discard
+    # most of the backfill whenever the benchmark's price history is
+    # shorter than the tickers' (e.g. SPY added late to the backfill).
+    n_neutral = int(out["ctx_sector_rel5"].isna().sum())
+    out["ctx_sector_rel5"] = out["ctx_sector_rel5"].fillna(0.0)
+    if n_neutral:
+        log(f"[ws3] ctx_sector_rel5 neutralized (0.0) for {n_neutral} rows: no benchmark leg")
     out["ctx_src_tier"] = [source_domain_tier(u) for u in news["url"]]
     out["ctx_word_count"] = (
         news["text"].fillna("").astype(str).apply(lambda s: len(_WORD_RE.findall(s)))
