@@ -18,14 +18,54 @@
 
 - **Source:** GDELT 2.1 DOC API news + yfinance daily prices, joined on
   ticker and date in DuckDB.
-- **Labels (weak):** label 1 if the ticker's next-trading-day abnormal return
-  vs SPY lands in the top decile across the sample, else 0. Nobody labeled
-  articles by hand; the market did the labeling. Positive rate ~10%.
+- **Labels (weak):** see "Labeling (0.3.0 workstream 1)" below. The 0.2.0
+  scheme (label 1 if the ticker's next-trading-day abnormal return vs SPY
+  lands in the top decile across the sample, else 0) is retained as the
+  `--label-scheme baseline` option so old vs new stays measurable. Nobody
+  labeled articles by hand; the market did the labeling. Positive rate ~10%.
 - **Scale:** 0.1.0 trained on 68 labeled rows (~7 positives) from 30 days.
   0.2.0 trains on 902 labeled rows (631 train / 271 test) from a 365-day
   backfill across 10 tickers: 1,709 GDELT articles and 2,571 daily price rows
   (2025-10-15 to 2026-09-30). The overnight retry filled 44 of 69 empty
   GDELT windows; 25 remain empty after HTTP 429 throttling.
+
+## Labeling (0.3.0 workstream 1)
+
+The weak labels were the noisiest part of the system: a single next-day
+return mixes real news-driven moves with random jumps. 0.3.0 replaces the
+labeling with a configurable pipeline (`signal_lab.models.labels`):
+
+- **Multi-day window (default):** label 1 if the ticker's *cumulative*
+  abnormal return vs the market benchmark over trading days t+1..t+3 lands
+  in the top decile, else 0. News takes time to digest; the window is
+  configurable via `--window-days`.
+- **Attention filter (default on):** an article is only labeled when its
+  ticker-day carried enough news presence: at least `--min-articles` (2)
+  distinct articles, OR a day strictly busier than 75% of that ticker's own
+  daily counts (`--no-top-quartile` disables the second branch,
+  `--no-attention` disables the filter). Quiet-day labels are mostly noise.
+- **Market leg:** ticker return minus benchmark (default SPY) return over
+  the same forward window; when the benchmark has no price on a date, the
+  universe equal-weight mean fills in. Rows without a full forward window
+  are dropped and counted.
+- **Baseline retained:** `--label-scheme baseline` reproduces the 0.2.0
+  t+1 top-decile labeling exactly (verified by test:
+  `test_baseline_reproduces_legacy_t1_labeling`).
+- **Provenance:** every stage-3 run emits a `label_config` block in its
+  JSON, e.g.
+  `{"scheme": "windowed", "window_days": 3, "quantile": 0.9,
+  "benchmark": "SPY", "attention": {"enabled": true, "min_articles": 2,
+  "top_quartile": true, "dropped_rows": 114, "dropped_pct": 0.1423},
+  "cutoff": 0.040032, "positive_rate": 0.1033, "n_labeled": 687,
+  "partial_window_rows_dropped": 91}`.
+  Positive rate is expected to stay in the 5-15% band; outside it, the
+  labeling (not the model) is the first suspect.
+- **Gold set:** `python -m signal_lab.models.gold_set sample` draws a
+  stratified sample of articles into a JSON file for hand-labeling ("does
+  this read positive/negative for the company?"); `gold_set agree` reports
+  the weak-label agreement rate, confusion breakdown, and Cohen's kappa
+  once the human labels are filled in. The human labeling itself is still
+  pending; when it lands, the agreement rate goes here.
 
 ## Features
 
@@ -83,11 +123,13 @@ to check the signal, and so far the signal does not survive.
 ## Limitations
 
 - Weak labels are noisy: a top-decile next-day jump mixes real news-driven
-  moves with random volatility.
-- Single-day label window; news takes longer than a day to digest.
+  moves with random volatility. 0.3.0 widens the window and filters
+  quiet days, but the labels are still market-derived, not human.
 - No market-context features yet (volatility regime, momentum, sector moves).
 - No probability calibration; no abstention on low-confidence articles.
 - Single time-based split, no confidence intervals yet.
+- Gold-set human labels are still pending, so the weak-label agreement
+  rate is unmeasured.
 - See [docs/limitations.md](limitations.md) and the 0.3.0 roadmap
   ([docs/roadmap-0.3.0.md](roadmap-0.3.0.md)) for the planned fixes.
 
