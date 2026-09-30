@@ -21,6 +21,14 @@ Labeling flags (0.3.0 workstream 1):
   --no-top-quartile      disable the top-quartile OR-branch of the attention
                          filter (keep only the min-articles rule)
   --benchmark TICKER     market benchmark for abnormal returns (default SPY)
+
+Feature flags (0.3.0 workstream 2):
+  --finbert              also run the FinBERT ablation (TF-IDF vs FinBERT-only
+                         vs combined, same data/split) and add the
+                         `finbert_ablation` block to the JSON. Opt-in: torch +
+                         transformers stay optional, and the first use
+                         downloads ~440MB of model weights. Offline it falls
+                         back to TF-IDF+lexicon with a clear log line.
 """
 
 from __future__ import annotations
@@ -101,8 +109,10 @@ def label_config_from_args(args) -> LabelConfig:
     ).validated()
 
 
-def run_comparison(log=print, label_cfg: LabelConfig | None = None) -> dict:
-    result = run_pipeline(log=log, label_cfg=label_cfg)
+def run_comparison(
+    log=print, label_cfg: LabelConfig | None = None, finbert: bool = False
+) -> dict:
+    result = run_pipeline(log=log, label_cfg=label_cfg, finbert=finbert)
     by_name = {r.name: r for r in result["reports"]}
     log(
         f"[m3] best model: {result['best_model']}",
@@ -123,6 +133,7 @@ def run_comparison(log=print, label_cfg: LabelConfig | None = None) -> dict:
         "n_train": result["n_train"],
         "n_test": result["n_test"],
         "label_config": result["label_config"],
+        "finbert_ablation": result["finbert_ablation"],
     }
 
 
@@ -132,6 +143,12 @@ def main() -> None:
         "--json",
         action="store_true",
         help="print only the JSON result to stdout (logs to stderr)",
+    )
+    ap.add_argument(
+        "--finbert",
+        action="store_true",
+        help="also run the FinBERT ablation (opt-in; downloads ~440MB on "
+        "first use, falls back cleanly offline)",
     )
     add_label_args(ap)
     args = ap.parse_args()
@@ -149,7 +166,7 @@ def main() -> None:
             "[m3] note: --label-scheme baseline pins the 0.2.0 labeling; "
             "other labeling flags are ignored"
         )
-    result = run_comparison(log=log, label_cfg=label_cfg)
+    result = run_comparison(log=log, label_cfg=label_cfg, finbert=args.finbert)
     if args.json:
         print(json.dumps(sanitize_json(result)))
     else:

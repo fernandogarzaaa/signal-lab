@@ -109,9 +109,13 @@ def build_dataset(
     return labeled[cols].reset_index(drop=True), label_block
 
 
-def run_pipeline(log=print, label_cfg: LabelConfig | None = None) -> dict:
+def run_pipeline(
+    log=print, label_cfg: LabelConfig | None = None, finbert: bool = False
+) -> dict:
     """Build dataset, train, persist artifacts. Returns the train() result,
-    with a 'label_config' block describing the labeling used."""
+    with a 'label_config' block describing the labeling used and a
+    'finbert_ablation' block (0.3.0 workstream 2; opt-in via ``finbert=True``
+    or the SIGNAL_LAB_FINBERT=1 env var, offline-safe)."""
     label_cfg = (label_cfg or LabelConfig()).validated()
     ART.mkdir(parents=True, exist_ok=True)
     df, label_block = build_dataset(log=log, label_cfg=label_cfg)
@@ -143,6 +147,10 @@ def run_pipeline(log=print, label_cfg: LabelConfig | None = None) -> dict:
     log(f"[m3] scored {len(scored_df)} articles -> {ART / 'scored_news.csv'}")
     result["best_model"] = best_name
     result["label_config"] = label_block
+    # 0.3.0 WS2: FinBERT ablation (opt-in; falls back cleanly offline).
+    result["finbert_ablation"] = maybe_run_finbert_ablation(
+        df, log=log, tfidf_result=result, requested=finbert
+    )
     return result
 
 
@@ -152,3 +160,86 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+# ---------------------------------------------------------------------------
+# 0.3.0 workstream 2: optional feature builders (append-only section).
+#
+# FEATURE_BUILDERS maps a feature-set name to
+# ``builder(texts, vectorizer, **kwargs) -> feature matrix``. The default
+# pipeline and workstream 1 use "tfidf_lexicon". The sibling workstream 3
+# (market-context features) appends its own builder to this dict; keep all
+# additions here so the later merge stays trivial.
+# ---------------------------------------------------------------------------
+
+FEATURE_BUILDERS: dict = {
+    "tfidf_lexicon": lambda texts, vectorizer, **kwargs: featurize(texts, vectorizer),
+}
+
+
+def register_feature_builder(name: str, builder) -> None:
+    """Register an additional feature builder (idempotent by name)."""
+    if name in FEATURE_BUILDERS:
+        raise ValueError(f"feature builder {name!r} is already registered")
+    FEATURE_BUILDERS[name] = builder
+
+
+def _register_finbert_builders() -> None:
+    # Imported lazily: embeddings.py never imports torch/transformers at
+    # module scope, so this stays offline-safe.
+    from signal_lab.models.embeddings import (
+        combined_feature_matrix,
+        finbert_feature_matrix,
+    )
+
+    def _finbert_only(texts, vectorizer, **kwargs):
+        return finbert_feature_matrix(texts, **kwargs)
+
+    def _combined(texts, vectorizer, **kwargs):
+        return combined_feature_matrix(texts, vectorizer, **kwargs)
+
+    for _name, _fn in (
+        ("finbert_only", _finbert_only),
+        ("tfidf_lexicon_finbert", _combined),
+    ):
+        if _name not in FEATURE_BUILDERS:
+            FEATURE_BUILDERS[_name] = _fn
+
+
+_register_finbert_builders()
+
+
+def _finbert_requested(explicit: bool) -> bool:
+    import os
+
+    return bool(explicit) or os.environ.get("SIGNAL_LAB_FINBERT", "").strip() == "1"
+
+
+def maybe_run_finbert_ablation(
+    df, log=print, tfidf_result: dict | None = None, requested: bool = False
+) -> dict:
+    """Run the FinBERT ablation when requested, else a not-requested block.
+
+    Always returns a JSON-safe ``finbert_ablation`` block; never raises for
+    a missing torch/transformers install (the fallback path logs and
+    reports TF-IDF-only).
+    """
+    from signal_lab.models.embeddings import FINBERT_MODEL_ID, run_finbert_ablation
+
+    if not _finbert_requested(requested):
+        return {
+            "available": False,
+            "model": FINBERT_MODEL_ID,
+            "reason": "not requested (pass --finbert or set SIGNAL_LAB_FINBERT=1)",
+        }
+    try:
+        return run_finbert_ablation(
+            df, text_col="text", log=log, tfidf_result=tfidf_result
+        )
+    except Exception as exc:  # noqa: BLE001 - ablation must never break stage 3
+        log(f"[m3] finbert ablation failed ({exc}); continuing TF-IDF-only")
+        return {
+            "available": False,
+            "model": FINBERT_MODEL_ID,
+            "reason": f"ablation error: {exc}",
+        }
