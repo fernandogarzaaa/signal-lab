@@ -5,7 +5,9 @@ Prints ONLY the JSON comparison to stdout (logs to stderr):
  "challenger": {...},
  "imbalance_comparison": {"class_weights": {...}, "resampling": {...},
                           "threshold_tuning": {...}},
- "label_config": {"scheme": "windowed", "window_days": 3, ...}}
+ "label_config": {"scheme": "windowed", "window_days": 3, ...},
+ "feature_importance": {"model": ..., "method": ...,
+                        "top_text_terms": [...], "dense_features": [...]}}
 
 Trains on the real pipeline (idempotent: rebuilds dataset + artifacts).
 
@@ -123,6 +125,7 @@ def run_comparison(log=print, label_cfg: LabelConfig | None = None) -> dict:
         "n_train": result["n_train"],
         "n_test": result["n_test"],
         "label_config": result["label_config"],
+        "feature_importance": result["feature_importance"],
     }
 
 
