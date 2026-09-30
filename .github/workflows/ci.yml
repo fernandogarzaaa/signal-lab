@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r packages/cli/engine/requirements.txt
+          pip install pytest
+      - name: Run test suite
+        run: python -m pytest tests/ -v
+      - name: Audit for stubs and placeholders
+        run: |
+          set -e
+          ! grep -rn "NotImplementedError" src/ --include="*.py"
+          ! grep -rniE "TODO|FIXME|XXX" src/ --include="*.py"
+          echo "audit clean"
+
+  node-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Pack npm tarball
+        run: |
+          cd packages/cli
+          npm pack
+          test -f signallab-0.1.0.tgz
+          tar tzf signallab-0.1.0.tgz | grep -q "package/bin/signallab.js"
+          tar tzf signallab-0.1.0.tgz | grep -q "package/engine/seed_data/signal_lab.duckdb"
+          echo "tarball contents verified"

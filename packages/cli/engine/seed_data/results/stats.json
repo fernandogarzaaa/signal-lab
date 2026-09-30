@@ -1,0 +1,25 @@
+{
+  "stage": "stats",
+  "ran_at": "2026-09-30T04:53:35.848229+00:00",
+  "result": {
+    "events": [
+      {
+        "ticker": "AAPL",
+        "date": "2026-09-09",
+        "abnormal_return": 0.03724,
+        "t_stat": null,
+        "p_value": null,
+        "ci_low": null,
+        "ci_high": null,
+        "significant": false
+      }
+    ],
+    "summary": {
+      "n_events": 1,
+      "mean_abnormal_return": 0.03724,
+      "share_significant": 0.0,
+      "window": "[-1,+1]",
+      "window_p_value": null
+    }
+  }
+}

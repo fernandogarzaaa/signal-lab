@@ -1,0 +1,9 @@
+# Never ship the built venv, bytecode, or runtime data.
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+data/
+docs/
+.DS_Store
+*.log

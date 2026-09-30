@@ -1,0 +1,16 @@
+{
+  "stage": "ingest",
+  "ran_at": "2026-09-30T04:53:35.848229+00:00",
+  "result": {
+    "news_rows": 109,
+    "price_rows": 0,
+    "tickers": [
+      "AAPL",
+      "MSFT",
+      "JPM"
+    ],
+    "start": "2026-09-09",
+    "end": "2026-09-30",
+    "news_windows": 3
+  }
+}
