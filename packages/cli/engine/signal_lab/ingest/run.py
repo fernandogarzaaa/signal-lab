@@ -11,6 +11,8 @@ import sys
 import time
 from datetime import date, timedelta
 
+from signal_lab import sanitize_json
+
 from . import DB_PATH, fetch_news, fetch_prices, row_counts, store_news, store_prices
 
 # Company name phrases for GDELT queries, mapped to tickers.
