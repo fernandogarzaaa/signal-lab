@@ -17,9 +17,11 @@ import csv
 import difflib
 import re
 from functools import lru_cache
+from importlib import resources
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+# Legacy location (local dev runs); package data is preferred.
 ALIASES_CSV = REPO_ROOT / "data" / "aliases.csv"
 
 # Words that mark a sentence as finance/business context.
@@ -37,7 +39,12 @@ AMBIGUOUS = {"apple", "meta", "amazon", "alphabet", "tesla", "nvidia", "exxon"}
 
 def _load_aliases() -> list[tuple[str, str]]:
     rows: list[tuple[str, str]] = []
-    with open(ALIASES_CSV, newline="", encoding="utf-8") as f:
+    # Prefer the CSV bundled as package data (works installed, in CI, and in
+    # the npm-packaged engine). Fall back to the repo-local data/ copy.
+    csv_path = ALIASES_CSV
+    if not csv_path.exists():
+        csv_path = resources.files(__package__) / "data" / "aliases.csv"
+    with open(csv_path, newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
             alias = row["alias"].strip().lower()
             ticker = row["ticker"].strip().upper()
