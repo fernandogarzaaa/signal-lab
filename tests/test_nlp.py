@@ -1,5 +1,7 @@
 """Unit tests for entity extractors (no network, no DB)."""
 
+import pytest
+
 from signal_lab.nlp import extract_baseline, extract_ner
 
 
@@ -23,6 +25,7 @@ def test_ambiguous_alias_low_confidence_without_context():
 
 
 def test_ner_extracts_org():
+    pytest.importorskip("spacy", reason="spaCy is an optional dependency")
     hits = extract_ner("Microsoft and Nvidia announced a chip partnership")
     tickers = {t for _, t, _ in hits}
     assert {"MSFT", "NVDA"} <= tickers
