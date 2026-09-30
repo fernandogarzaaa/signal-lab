@@ -565,3 +565,43 @@ def save_ablation_json(ablation: dict, path: str | Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(ablation, indent=2, default=str))
     return path
+
+
+def finbert_ctx_matrix(
+    texts,
+    dense_extra=None,
+    cache_dir: str | Path | None = None,
+    log=print,
+) -> "np.ndarray | csr_matrix":
+    """FinBERT (768-dim, cache-only) + dense context features.
+
+    0.4.0: the walk-forward winner. Cache-only by design: never imports
+    torch/transformers, never downloads. Texts without a cached embedding
+    become zero vectors (count logged). ``dense_extra`` (e.g. the 7 market-
+    context features) is hstacked when provided, giving a sparse matrix;
+    without it the result is the dense (n, 768) embedding matrix.
+    """
+    import numpy as np
+
+    from signal_lab.models.novelty import load_embedding
+
+    vecs = []
+    missing = 0
+    for t in texts:
+        v = load_embedding(str(t), cache_dir=cache_dir)
+        if v is None:
+            missing += 1
+            v = np.zeros(768, dtype=np.float32)
+        vecs.append(v)
+    emb = np.stack(vecs)
+    log(f"[finbert] cache-only matrix: {emb.shape[0]} rows, "
+        f"{missing} zero-filled (no torch import, no download)")
+    if dense_extra is None:
+        return emb
+    from scipy.sparse import csr_matrix
+    from scipy.sparse import hstack as sparse_hstack
+
+    return sparse_hstack(
+        [csr_matrix(emb), csr_matrix(np.asarray(dense_extra, dtype=float))],
+        format="csr",
+    )

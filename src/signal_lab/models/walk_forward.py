@@ -126,6 +126,7 @@ def run_walk_forward(
     purge_days: int = 5,
     embargo_days: int = 5,
     min_train: int = 50,
+    featurize_fn=None,
     log=print,
 ) -> dict:
     """Run purged walk-forward CV of the challenger pipeline.
@@ -133,6 +134,10 @@ def run_walk_forward(
     df needs columns: text (or title), published_at, label.
     dense_extra: optional DataFrame/ndarray aligned with df (context
     features), split positionally per fold like the text matrix.
+    featurize_fn: optional ``(texts, vectorizer, dense_extra) -> sparse
+    matrix`` overriding the default TF-IDF + lexicon + dense_extra
+    construction (used to ablate feature groups, e.g. drop the lexicon).
+    Defaults to ``signal_lab.models.featurize``.
     """
     work = df.dropna(subset=["published_at", "label"]).reset_index(drop=True)
     if "text" not in work.columns:
@@ -140,6 +145,7 @@ def run_walk_forward(
         work["text"] = make_text(work)
     texts = work["text"].fillna("").astype(str)
     y = work["label"].astype(int).values
+    featurize_fn = featurize_fn or featurize
 
     splits = walk_forward_splits(
         work["published_at"],
@@ -174,8 +180,8 @@ def run_walk_forward(
             sublinear_tf=True,
         )
         vec.fit(texts.iloc[tri])
-        Xtr = featurize(texts.iloc[tri], vec, dense_extra=_take_rows(dense_extra, tri))
-        Xte = featurize(texts.iloc[tei], vec, dense_extra=_take_rows(dense_extra, tei))
+        Xtr = featurize_fn(texts.iloc[tri], vec, dense_extra=_take_rows(dense_extra, tri))
+        Xte = featurize_fn(texts.iloc[tei], vec, dense_extra=_take_rows(dense_extra, tei))
         ytr, yte = y[tri], y[tei]
 
         clf = LogisticRegression(
@@ -251,6 +257,14 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Purged walk-forward CV (0.3.0 WS5)")
     ap.add_argument("--folds", type=int, default=5, help="number of test folds")
     ap.add_argument(
+        "--repr",
+        choices=["tfidf", "finbert_ctx"],
+        default="finbert_ctx",
+        help="text representation: tfidf (TF-IDF+lexicon, 0.3.0 default) or "
+        "finbert_ctx (FinBERT+7 ctx, 0.4.0 default; cache-only, zero-fills "
+        "texts without a cached embedding)",
+    )
+    ap.add_argument(
         "--json",
         action="store_true",
         help="print only the JSON result to stdout (logs to stderr)",
@@ -268,14 +282,22 @@ def main() -> None:
     label_cfg = label_config_from_args(args).validated()
     df, _label_block = build_dataset(log=log, label_cfg=label_cfg)
     ctx = df[CONTEXT_FEATURE_NAMES]
+    featurize_fn = None
+    if args.repr == "finbert_ctx":
+        from signal_lab.models.embeddings import finbert_ctx_matrix
+
+        def featurize_fn(texts, vectorizer, dense_extra=None):
+            return finbert_ctx_matrix(texts, dense_extra=dense_extra, log=log)
     result = run_walk_forward(
         df,
         dense_extra=ctx,
         n_splits=args.folds,
         purge_days=label_cfg.window_days + 2,
         embargo_days=label_cfg.window_days + 2,
+        featurize_fn=featurize_fn,
         log=log,
     )
+    result["representation"] = args.repr
     ART.mkdir(parents=True, exist_ok=True)
     (ART / "walk_forward.json").write_text(json.dumps(sanitize_json(result), indent=2))
     log(f"[wf] wrote {ART / 'walk_forward.json'}")
