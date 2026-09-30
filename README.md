@@ -96,15 +96,23 @@ pytest tests/
 end to end on 30 days of data (223 news rows, 681 price rows across
 AAPL/MSFT/JPM), dashboard confirmed with real charts and cited RAG output.
 
-**0.2.0** (in progress): Loughran-McDonald finance-lexicon features merged
-(PR #2, CI green), plus a 365-day backfill scaling the training set ~5x
-(784 news rows and 2,571 price rows across 10 tickers so far; an overnight
-retry is filling the remaining GDELT windows). Honest results are reported
-in the [model card](docs/model-card.md): on current data the classifier
-scores PR-AUC ~0.16 against a ~0.10 chance level. Not good yet, and we say
-so. The 0.3.0 roadmap ([docs/roadmap-0.3.0.md](docs/roadmap-0.3.0.md),
-tracking issue #4) covers label quality, FinBERT features, market-context
-features, calibration, and purged walk-forward validation.
+**0.2.0** is published on npm (`signallab@0.2.0`, 2026-09-30): full 365-day
+backfill (1,709 news rows, 2,571 price rows, 902 labeled examples).
+Honest final metrics: challenger PR-AUC 0.131 vs 0.126 baseline vs 0.103
+chance; backtest sentiment +1.1% vs buy-and-hold +14.5% (p = 0.31, not
+significant).
+
+**0.3.0** (2026-10-01): all six workstreams complete (PRs #9–#14, CI green).
+Configurable weak labels, frozen FinBERT extractor with ablation, 7
+market-context features, probability calibration (Platt ECE 0.110 → 0.077;
+isotonic hurts and is not used), and 5-fold purged walk-forward CV with
+embargo (mean PR-AUC 0.170, 95% CI [0.019, 0.321]; mean F1 0.018).
+Confidence abstention was built, tested, and found not to help — precision
+is flat at 0.067 across the threshold range, and the backtest gate removes
+coverage without improving Sharpe. The null and negative results are
+reported in full in the [research note](docs/research-note-0.3.0.md) and
+the [model card](docs/model-card.md). The model didn't get smarter; the
+dataset got bigger and the evaluation got more honest.
 
 ## Data attribution
 

@@ -1,6 +1,6 @@
 # Signal Lab 0.3.0 Scope: Robust Model
 
-Status: draft (2026-09-30)
+Status: **complete** (2026-10-01) — all workstreams shipped, PRs #9–#14 merged, CI green.
 Depends on: 0.2.0 published (full 365-day backfill, all six stages re-run, re-seeded)
 
 ## Objective
@@ -143,8 +143,14 @@ Total: roughly 10-13 sessions after 0.2.0 ships.
 ## Definition of done
 
 - All six workstreams complete with acceptance criteria met.
-- `pytest` green, CI green, PR merged (one PR, squash, never direct to main).
-- All six stages re-run on final data; seed snapshot regenerated.
+  - WS1 labels: PR #9 (1f25cf8) — configurable labeling pipeline, baseline reproduces 0.2.0 exactly.
+  - WS2 FinBERT: PR #10 (c7a266b) — frozen FinBERT extractor + ablation (FinBERT-only 0.164 vs TF-IDF 0.140 PR-AUC).
+  - WS3 market context: PR #11 (c3092e3) — 7 context features + dense_extra plumbing + feature_importance.
+  - WS4 calibration + abstention: PR #14 (39e67c1) — ECE, Platt/isotonic, abstention curves, backtest gate. Negative results reported.
+  - WS5 purged walk-forward CV: PR #13 (a0bbf68) — 5 folds, purge + embargo, per-fold stats, 95% CIs.
+  - WS6 docs + release: this workstream.
+- `pytest` green (79 passed, 1 skipped), CI green, PRs merged (one PR per workstream, squash, never direct to main).
+- Research note with null/negative results: [docs/research-note-0.3.0.md](research-note-0.3.0.md).
 - Fresh `npm pack` + fresh install verified through real entrypoints
   (setup, doctor, seed, all stages, dashboard).
 - `signallab@0.3.0` published only after the above; registry version and

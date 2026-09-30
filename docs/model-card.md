@@ -259,13 +259,25 @@ to check the signal, and so far the signal does not survive.
   quiet days, but the labels are still market-derived, not human.
 - Market-context features are present (0.3.0 workstream 3), but the
   sector-relative-strength leg currently falls back to SPY because sector
-  ETF prices are not in the backfill; see the Features section.
-- No probability calibration; no abstention on low-confidence articles.
-- Single time-based split, no confidence intervals yet.
+  ETF prices are not in the backfill; rows with no benchmark leg are
+  neutralized to 0.0 and counted (878 rows in the 0.3.0 backfill) rather
+  than silently dropped. See the Features section and
+  [docs/research-note-0.3.0.md](research-note-0.3.0.md).
+- Probability calibration exists (0.3.0 workstream 4): Platt scaling
+  improves ECE (0.110 to 0.077 on the holdout); isotonic regression hurts
+  (0.135) on 121 calibration points and is not used. Confidence abstention
+  was tested and does not help: precision is flat at 0.067 across tau in
+  [0.10, 0.50], and the backtest gate collapses event coverage without
+  improving Sharpe. Full negative results in
+  [docs/research-note-0.3.0.md](research-note-0.3.0.md).
+- Evaluation is 5-fold purged walk-forward CV with embargo (0.3.0
+  workstream 5): mean PR-AUC 0.170, 95% CI [0.019, 0.321]; mean F1 0.018,
+  95% CI [-0.039, 0.075]. Fold 1 was unscorable (no positives in the early
+  training window). The single-split number hid major regime instability.
 - Gold-set human labels are still pending, so the weak-label agreement
   rate is unmeasured.
 - See [docs/limitations.md](limitations.md) and the 0.3.0 roadmap
-  ([docs/roadmap-0.3.0.md](roadmap-0.3.0.md)) for the planned fixes.
+  ([docs/roadmap-0.3.0.md](roadmap-0.3.0.md)).
 
 ## Citation
 
