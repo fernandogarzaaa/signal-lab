@@ -109,6 +109,20 @@ function createApp() {
     }
   });
 
+  // Model diagnostics (0.3.0): walk-forward + calibration artifacts.
+  // Written by `python -m signal_lab.models.walk_forward` and
+  // `python -m signal_lab.models.calibration` into DATA_DIR/artifacts.
+  app.get('/api/diagnostics/:name', (req, res) => {
+    const { name } = req.params;
+    if (!/^[a-z_]+$/.test(name)) return res.status(400).json({ error: 'bad name' });
+    const f = path.join(DATA_DIR, 'artifacts', `${name}.json`);
+    try {
+      res.json(JSON.parse(fs.readFileSync(f, 'utf8')));
+    } catch {
+      res.status(404).json({ error: 'not run yet' });
+    }
+  });
+
   app.post('/api/seed', (req, res) => {
     try {
       const copied = seedDemo();
