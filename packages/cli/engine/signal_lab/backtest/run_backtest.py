@@ -43,7 +43,12 @@ def expand_events(events: pd.DataFrame, trading_dates: list, hold_days: int) -> 
         rows.append({"ticker": ev["ticker"], "asof": tdates[off], "strength": 0.0})
     sig = pd.DataFrame(rows, columns=["ticker", "asof", "strength"])
     if sig.empty:
-        return sig
+        # Preserve dtypes: concatenating an empty object-dtype frame would
+        # upcast a sibling frame's float64 strength column to object, which
+        # later crashes scipy's ttest_rel on the full dataset (0.2.0).
+        return pd.DataFrame({"ticker": pd.Series(dtype="str"),
+                             "asof": pd.Series(dtype="datetime64[ns]"),
+                             "strength": pd.Series(dtype="float64")})
     return sig.sort_values(["ticker", "asof", "strength"]).drop_duplicates(
         subset=["ticker", "asof"], keep="last").reset_index(drop=True)
 

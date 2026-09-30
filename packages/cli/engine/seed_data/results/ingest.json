@@ -1,16 +1,30 @@
 {
   "stage": "ingest",
-  "ran_at": "2026-09-30T04:53:35.848229+00:00",
+  "ran_at": "2026-09-30T16:05:26.587032+00:00",
   "result": {
-    "news_rows": 109,
-    "price_rows": 0,
+    "news_rows": 1709,
+    "price_rows": 2571,
     "tickers": [
       "AAPL",
+      "AMZN",
+      "GOOGL",
+      "JNJ",
+      "JPM",
+      "META",
       "MSFT",
-      "JPM"
+      "NVDA",
+      "SPY",
+      "TSLA",
+      "XOM"
     ],
-    "start": "2026-09-09",
-    "end": "2026-09-30",
-    "news_windows": 3
+    "news_range": [
+      "2025-10-15 17:15:00",
+      "2026-09-30 07:15:00"
+    ],
+    "price_range": [
+      "2025-09-30",
+      "2026-09-29"
+    ],
+    "note": "365-day GDELT backfill plus overnight retry of empty windows; 25 of 69 retried windows still empty (HTTP 429 throttling). No re-fetch in this run: counts report the live database."
   }
 }

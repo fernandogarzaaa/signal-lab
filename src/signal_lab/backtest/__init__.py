@@ -129,11 +129,17 @@ def run(signals: dict[str, pd.DataFrame], prices: pd.DataFrame,
                 continue
             d = daily.set_index("date")["port_ret"]
             aligned = pd.concat([d, base], axis=1, join="inner").dropna()
-            if len(aligned) < 3:
+            # Coerce: an object-dtype port_ret (e.g. from concatenating an
+            # empty signal frame) crashes scipy's ttest_rel. Non-numeric
+            # entries become NaN and are dropped before the test.
+            a = pd.to_numeric(aligned.iloc[:, 0], errors="coerce")
+            b = pd.to_numeric(aligned.iloc[:, 1], errors="coerce")
+            mask = a.notna() & b.notna()
+            a, b = a[mask], b[mask]
+            if len(a) < 3:
                 continue
-            diff = (aligned.iloc[:, 0] - aligned.iloc[:, 1]).values
-            t_stat, p_val = sstats.ttest_rel(aligned.iloc[:, 0], aligned.iloc[:, 1])
-            lo, hi = bootstrap_sharpe_diff(aligned.iloc[:, 0].values, aligned.iloc[:, 1].values)
+            t_stat, p_val = sstats.ttest_rel(a, b)
+            lo, hi = bootstrap_sharpe_diff(a.values, b.values)
             res.loc[res.strategy == name, "paired_t"] = round(float(t_stat), 3)
             res.loc[res.strategy == name, "paired_p"] = round(float(p_val), 4)
             res.loc[res.strategy == name, "sharpe_diff_ci95"] = f"[{lo:.2f}, {hi:.2f}]"

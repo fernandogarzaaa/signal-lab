@@ -24,9 +24,10 @@
   `--label-scheme baseline` option so old vs new stays measurable. Nobody
   labeled articles by hand; the market did the labeling. Positive rate ~10%.
 - **Scale:** 0.1.0 trained on 68 labeled rows (~7 positives) from 30 days.
-  0.2.0 trains on 337 labeled rows (235 train / 102 test) from a 365-day
-  backfill across 10 tickers. Numbers below are pre-retry (2026-09-30); the
-  backfill was still filling GDELT windows.
+  0.2.0 trains on 902 labeled rows (631 train / 271 test) from a 365-day
+  backfill across 10 tickers: 1,709 GDELT articles and 2,571 daily price rows
+  (2025-10-15 to 2026-09-30). The overnight retry filled 44 of 69 empty
+  GDELT windows; 25 remain empty after HTTP 429 throttling.
 
 ## Labeling (0.3.0 workstream 1)
 
@@ -89,7 +90,8 @@ scores 90% accuracy and learns nothing).
 |-------|----------------|-------------------|
 | 0.1.0, 68 rows, TF-IDF only | 0.4167 | 0.2000 |
 | 0.1.0 + lexicon, 68 rows | 0.1024 | 0.1429 |
-| 0.2.0, 337 rows, TF-IDF + lexicon | 0.1626 | 0.0878 |
+| 0.2.0 partial, 337 rows, TF-IDF + lexicon | 0.1626 | 0.0878 |
+| 0.2.0 final, 902 rows, TF-IDF + lexicon | 0.1260 | 0.1309 |
 
 Chance level is ~0.10 (the positive rate). Read the table carefully:
 
@@ -97,14 +99,20 @@ Chance level is ~0.10 (the positive rate). Read the table carefully:
   "features hurt"; it is noise. With ~7 positives, a single holdout split
   cannot distinguish signal from luck. Temporal CV folds contained zero
   positives.
-- On 337 rows the model scores 0.16 vs 0.10 chance. Barely above random.
-  Both baseline and challenger have F1 = 0 at threshold 0.5.
+- On 337 partial rows the challenger scored below the baseline (0.088 vs
+  0.163), again noise: both had F1 = 0 at threshold 0.5.
+- On the final 902 rows the challenger (class-weighted LightGBM) scores
+  0.131 vs 0.126 baseline vs 0.103 chance. Slightly above random, and the
+  challenger finally has non-zero F1 (0.107 at threshold 0.5), but the
+  margin over the unweighted baseline is 0.005 PR-AUC: not a defensible win.
 
-**Conclusion we stand behind:** the small dataset cannot support trustworthy
-model selection, and the lexicon's effect is inconclusive until the data is
-bigger. Data scale, not features, is the binding constraint. We did not tune
-the model until it looked good; we reported the bad numbers and scaled the
-data instead.
+**Conclusion we stand behind:** even at 902 rows the dataset cannot support
+trustworthy model selection, and the lexicon's effect remains inconclusive.
+Data scale and label quality, not features, are the binding constraints.
+The walk-forward backtest agrees: the sentiment-momentum strategy returned
++1.1% vs +14.5% buy-and-hold over 250 days, Sharpe 0.79 vs 1.10, paired
+t-test p = 0.31 (not significant). We did not tune the model until it
+looked good; we reported the numbers as they are.
 
 ## Intended use
 

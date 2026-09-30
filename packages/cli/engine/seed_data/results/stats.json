@@ -1,1 +1,25 @@
-{"events": [], "summary": {"n_events": 0, "mean_abnormal_return": null, "share_significant": null, "window": "[-1,+1]", "window_p_value": null}}
+{
+  "stage": "stats",
+  "ran_at": "2026-09-30T16:05:23.802282+00:00",
+  "result": {
+    "events": [
+      {
+        "ticker": "TSLA",
+        "date": "2026-07-08",
+        "abnormal_return": -0.03106,
+        "t_stat": null,
+        "p_value": null,
+        "ci_low": null,
+        "ci_high": null,
+        "significant": false
+      }
+    ],
+    "summary": {
+      "n_events": 1,
+      "mean_abnormal_return": -0.03106,
+      "share_significant": 0.0,
+      "window": "[-1,+1]",
+      "window_p_value": null
+    }
+  }
+}
