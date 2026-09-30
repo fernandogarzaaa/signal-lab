@@ -19,3 +19,6 @@ npm-debug.log*
 
 # OS
 .DS_Store
+.venv-ws2/
+.ws2-wheels/
+.ws2-tmp/
