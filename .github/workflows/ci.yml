@@ -40,7 +40,8 @@ jobs:
         run: |
           cd packages/cli
           npm pack
-          test -f signallab-0.1.0.tgz
-          tar tzf signallab-0.1.0.tgz | grep -q "package/bin/signallab.js"
-          tar tzf signallab-0.1.0.tgz | grep -q "package/engine/seed_data/signal_lab.duckdb"
+          TARBALL="signallab-$(node -p "require('./package.json').version").tgz"
+          test -f "$TARBALL"
+          tar tzf "$TARBALL" | grep -q "package/bin/signallab.js"
+          tar tzf "$TARBALL" | grep -q "package/engine/seed_data/signal_lab.duckdb"
           echo "tarball contents verified"

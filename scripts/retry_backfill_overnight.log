@@ -1,0 +1,393 @@
+[retry] 69 failed windows to retry
+[retry] AAPL [2025-09-30..2025-11-09] (1/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED AAPL [2025-09-30..2025-11-09]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Apple+stock%22+OR+%22Apple+shares%22+OR+%22Apple+earnings%22+OR+%22AAPL+stock%22+OR+%22AAPL+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20250930000000&enddatetime=20251109235959
+[retry] politeness sleep 180s
+[retry] MSFT [2025-12-20..2026-01-29] (2/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[retry] FAILED MSFT [2025-12-20..2026-01-29]: ('Connection broken: IncompleteRead(7853 bytes read, 2387 more expected)', IncompleteRead(7853 bytes read, 2387 more expected))
+[retry] politeness sleep 180s
+[retry] NVDA [2026-03-11..2026-04-20] (3/69)
+[retry] FAILED NVDA [2026-03-11..2026-04-20]: Response ended prematurely
+[retry] politeness sleep 180s
+[retry] NVDA [2026-04-20..2026-05-31] (4/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED NVDA [2026-04-20..2026-05-31]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Nvidia+stock%22+OR+%22Nvidia+shares%22+OR+%22Nvidia+earnings%22+OR+%22NVDA+stock%22+OR+%22NVDA+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20260420000000&enddatetime=20260531235959
+[retry] politeness sleep 180s
+[retry] NVDA [2026-05-31..2026-07-10] (5/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[retry] stored 34 rows for NVDA [2026-05-31..2026-07-10]
+[retry] politeness sleep 180s
+[retry] NVDA [2026-07-10..2026-08-20] (6/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[retry] FAILED NVDA [2026-07-10..2026-08-20]: ('Connection broken: IncompleteRead(7853 bytes read, 2387 more expected)', IncompleteRead(7853 bytes read, 2387 more expected))
+[retry] politeness sleep 180s
+[retry] NVDA [2026-08-20..2026-09-30] (7/69)
+[retry] stored 30 rows for NVDA [2026-08-20..2026-09-30]
+[retry] politeness sleep 180s
+[retry] TSLA [2025-09-30..2025-11-09] (8/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[retry] stored 32 rows for TSLA [2025-09-30..2025-11-09]
+[retry] politeness sleep 180s
+[retry] TSLA [2025-11-09..2025-12-20] (9/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED TSLA [2025-11-09..2025-12-20]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Tesla+stock%22+OR+%22Tesla+shares%22+OR+%22Tesla+earnings%22+OR+%22TSLA+stock%22+OR+%22TSLA+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20251109000000&enddatetime=20251220235959
+[retry] politeness sleep 180s
+[retry] TSLA [2025-12-20..2026-01-29] (10/69)
+[retry] stored 33 rows for TSLA [2025-12-20..2026-01-29]
+[retry] politeness sleep 180s
+[retry] TSLA [2026-01-29..2026-03-11] (11/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] stored 32 rows for TSLA [2026-01-29..2026-03-11]
+[retry] politeness sleep 180s
+[retry] TSLA [2026-03-11..2026-04-20] (12/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED TSLA [2026-03-11..2026-04-20]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Tesla+stock%22+OR+%22Tesla+shares%22+OR+%22Tesla+earnings%22+OR+%22TSLA+stock%22+OR+%22TSLA+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20260311000000&enddatetime=20260420235959
+[retry] politeness sleep 180s
+[retry] TSLA [2026-04-20..2026-05-31] (13/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[retry] stored 34 rows for TSLA [2026-04-20..2026-05-31]
+[retry] politeness sleep 180s
+[retry] TSLA [2026-05-31..2026-07-10] (14/69)
+[retry] stored 33 rows for TSLA [2026-05-31..2026-07-10]
+[retry] politeness sleep 180s
+[retry] TSLA [2026-07-10..2026-08-20] (15/69)
+[retry] stored 31 rows for TSLA [2026-07-10..2026-08-20]
+[retry] politeness sleep 180s
+[retry] TSLA [2026-08-20..2026-09-30] (16/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[retry] FAILED TSLA [2026-08-20..2026-09-30]: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+[retry] politeness sleep 180s
+[retry] AMZN [2025-09-30..2025-11-09] (17/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED AMZN [2025-09-30..2025-11-09]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Amazon+stock%22+OR+%22Amazon+shares%22+OR+%22Amazon+earnings%22+OR+%22AMZN+stock%22+OR+%22AMZN+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20250930000000&enddatetime=20251109235959
+[retry] politeness sleep 180s
+[retry] AMZN [2025-11-09..2025-12-20] (18/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED AMZN [2025-11-09..2025-12-20]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Amazon+stock%22+OR+%22Amazon+shares%22+OR+%22Amazon+earnings%22+OR+%22AMZN+stock%22+OR+%22AMZN+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20251109000000&enddatetime=20251220235959
+[retry] politeness sleep 180s
+[retry] AMZN [2025-12-20..2026-01-29] (19/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[retry] stored 32 rows for AMZN [2025-12-20..2026-01-29]
+[retry] politeness sleep 180s
+[retry] AMZN [2026-01-29..2026-03-11] (20/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[retry] stored 32 rows for AMZN [2026-01-29..2026-03-11]
+[retry] politeness sleep 180s
+[retry] AMZN [2026-03-11..2026-04-20] (21/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[retry] FAILED AMZN [2026-03-11..2026-04-20]: ('Connection broken: IncompleteRead(7853 bytes read, 2387 more expected)', IncompleteRead(7853 bytes read, 2387 more expected))
+[retry] politeness sleep 180s
+[retry] AMZN [2026-04-20..2026-05-31] (22/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED AMZN [2026-04-20..2026-05-31]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Amazon+stock%22+OR+%22Amazon+shares%22+OR+%22Amazon+earnings%22+OR+%22AMZN+stock%22+OR+%22AMZN+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20260420000000&enddatetime=20260531235959
+[retry] politeness sleep 180s
+[retry] AMZN [2026-05-31..2026-07-10] (23/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED AMZN [2026-05-31..2026-07-10]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Amazon+stock%22+OR+%22Amazon+shares%22+OR+%22Amazon+earnings%22+OR+%22AMZN+stock%22+OR+%22AMZN+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20260531000000&enddatetime=20260710235959
+[retry] politeness sleep 180s
+[retry] AMZN [2026-07-10..2026-08-20] (24/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[retry] stored 29 rows for AMZN [2026-07-10..2026-08-20]
+[retry] politeness sleep 180s
+[retry] AMZN [2026-08-20..2026-09-30] (25/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED AMZN [2026-08-20..2026-09-30]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Amazon+stock%22+OR+%22Amazon+shares%22+OR+%22Amazon+earnings%22+OR+%22AMZN+stock%22+OR+%22AMZN+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20260820000000&enddatetime=20260930235959
+[retry] politeness sleep 180s
+[retry] GOOGL [2025-09-30..2025-11-09] (26/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[retry] stored 32 rows for GOOGL [2025-09-30..2025-11-09]
+[retry] politeness sleep 180s
+[retry] GOOGL [2025-11-09..2025-12-20] (27/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[retry] stored 34 rows for GOOGL [2025-11-09..2025-12-20]
+[retry] politeness sleep 180s
+[retry] GOOGL [2025-12-20..2026-01-29] (28/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED GOOGL [2025-12-20..2026-01-29]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Alphabet+stock%22+OR+%22Alphabet+shares%22+OR+%22Alphabet+earnings%22+OR+%22GOOGL+stock%22+OR+%22GOOGL+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20251220000000&enddatetime=20260129235959
+[retry] politeness sleep 180s
+[retry] GOOGL [2026-01-29..2026-03-11] (29/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[retry] FAILED GOOGL [2026-01-29..2026-03-11]: Response ended prematurely
+[retry] politeness sleep 180s
+[retry] GOOGL [2026-03-11..2026-04-20] (30/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED GOOGL [2026-03-11..2026-04-20]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Alphabet+stock%22+OR+%22Alphabet+shares%22+OR+%22Alphabet+earnings%22+OR+%22GOOGL+stock%22+OR+%22GOOGL+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20260311000000&enddatetime=20260420235959
+[retry] politeness sleep 180s
+[retry] GOOGL [2026-04-20..2026-05-31] (31/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[retry] FAILED GOOGL [2026-04-20..2026-05-31]: ('Connection broken: IncompleteRead(7853 bytes read, 2387 more expected)', IncompleteRead(7853 bytes read, 2387 more expected))
+[retry] politeness sleep 180s
+[retry] GOOGL [2026-05-31..2026-07-10] (32/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED GOOGL [2026-05-31..2026-07-10]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Alphabet+stock%22+OR+%22Alphabet+shares%22+OR+%22Alphabet+earnings%22+OR+%22GOOGL+stock%22+OR+%22GOOGL+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20260531000000&enddatetime=20260710235959
+[retry] politeness sleep 180s
+[retry] GOOGL [2026-07-10..2026-08-20] (33/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[retry] FAILED GOOGL [2026-07-10..2026-08-20]: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+[retry] politeness sleep 180s
+[retry] GOOGL [2026-08-20..2026-09-30] (34/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED GOOGL [2026-08-20..2026-09-30]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Alphabet+stock%22+OR+%22Alphabet+shares%22+OR+%22Alphabet+earnings%22+OR+%22GOOGL+stock%22+OR+%22GOOGL+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20260820000000&enddatetime=20260930235959
+[retry] politeness sleep 180s
+[retry] META [2025-09-30..2025-11-09] (35/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED META [2025-09-30..2025-11-09]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Meta+stock%22+OR+%22Meta+shares%22+OR+%22Meta+earnings%22+OR+%22META+stock%22+OR+%22META+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20250930000000&enddatetime=20251109235959
+[retry] politeness sleep 180s
+[retry] META [2025-11-09..2025-12-20] (36/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED META [2025-11-09..2025-12-20]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Meta+stock%22+OR+%22Meta+shares%22+OR+%22Meta+earnings%22+OR+%22META+stock%22+OR+%22META+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20251109000000&enddatetime=20251220235959
+[retry] politeness sleep 180s
+[retry] META [2025-12-20..2026-01-29] (37/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED META [2025-12-20..2026-01-29]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Meta+stock%22+OR+%22Meta+shares%22+OR+%22Meta+earnings%22+OR+%22META+stock%22+OR+%22META+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20251220000000&enddatetime=20260129235959
+[retry] politeness sleep 180s
+[retry] META [2026-01-29..2026-03-11] (38/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[retry] stored 33 rows for META [2026-01-29..2026-03-11]
+[retry] politeness sleep 180s
+[retry] META [2026-03-11..2026-04-20] (39/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED META [2026-03-11..2026-04-20]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Meta+stock%22+OR+%22Meta+shares%22+OR+%22Meta+earnings%22+OR+%22META+stock%22+OR+%22META+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20260311000000&enddatetime=20260420235959
+[retry] politeness sleep 180s
+[retry] META [2026-04-20..2026-05-31] (40/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[retry] stored 34 rows for META [2026-04-20..2026-05-31]
+[retry] politeness sleep 180s
+[retry] META [2026-05-31..2026-07-10] (41/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED META [2026-05-31..2026-07-10]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Meta+stock%22+OR+%22Meta+shares%22+OR+%22Meta+earnings%22+OR+%22META+stock%22+OR+%22META+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20260531000000&enddatetime=20260710235959
+[retry] politeness sleep 180s
+[retry] META [2026-07-10..2026-08-20] (42/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED META [2026-07-10..2026-08-20]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Meta+stock%22+OR+%22Meta+shares%22+OR+%22Meta+earnings%22+OR+%22META+stock%22+OR+%22META+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20260710000000&enddatetime=20260820235959
+[retry] politeness sleep 180s
+[retry] META [2026-08-20..2026-09-30] (43/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[retry] stored 32 rows for META [2026-08-20..2026-09-30]
+[retry] politeness sleep 180s
+[retry] JPM [2025-09-30..2025-11-09] (44/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[retry] stored 34 rows for JPM [2025-09-30..2025-11-09]
+[retry] politeness sleep 180s
+[retry] JPM [2025-11-09..2025-12-20] (45/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED JPM [2025-11-09..2025-12-20]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22JPMorgan+stock%22+OR+%22JPMorgan+shares%22+OR+%22JPMorgan+earnings%22+OR+%22JPM+stock%22+OR+%22JPM+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20251109000000&enddatetime=20251220235959
+[retry] politeness sleep 180s
+[retry] JPM [2025-12-20..2026-01-29] (46/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED JPM [2025-12-20..2026-01-29]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22JPMorgan+stock%22+OR+%22JPMorgan+shares%22+OR+%22JPMorgan+earnings%22+OR+%22JPM+stock%22+OR+%22JPM+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20251220000000&enddatetime=20260129235959
+[retry] politeness sleep 180s
+[retry] JPM [2026-01-29..2026-03-11] (47/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[retry] stored 32 rows for JPM [2026-01-29..2026-03-11]
+[retry] politeness sleep 180s
+[retry] JPM [2026-03-11..2026-04-20] (48/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED JPM [2026-03-11..2026-04-20]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22JPMorgan+stock%22+OR+%22JPMorgan+shares%22+OR+%22JPMorgan+earnings%22+OR+%22JPM+stock%22+OR+%22JPM+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20260311000000&enddatetime=20260420235959
+[retry] politeness sleep 180s
+[retry] JPM [2026-04-20..2026-05-31] (49/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[retry] FAILED JPM [2026-04-20..2026-05-31]: Response ended prematurely
+[retry] politeness sleep 180s
+[retry] JPM [2026-05-31..2026-07-10] (50/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] stored 34 rows for JPM [2026-05-31..2026-07-10]
+[retry] politeness sleep 180s
+[retry] JPM [2026-07-10..2026-08-20] (51/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[retry] stored 34 rows for JPM [2026-07-10..2026-08-20]
+[retry] politeness sleep 180s
+[retry] XOM [2025-09-30..2025-11-09] (52/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED XOM [2025-09-30..2025-11-09]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Exxon+stock%22+OR+%22Exxon+shares%22+OR+%22Exxon+earnings%22+OR+%22XOM+stock%22+OR+%22XOM+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20250930000000&enddatetime=20251109235959
+[retry] politeness sleep 180s
+[retry] XOM [2025-11-09..2025-12-20] (53/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[retry] stored 34 rows for XOM [2025-11-09..2025-12-20]
+[retry] politeness sleep 180s
+[retry] XOM [2025-12-20..2026-01-29] (54/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED XOM [2025-12-20..2026-01-29]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Exxon+stock%22+OR+%22Exxon+shares%22+OR+%22Exxon+earnings%22+OR+%22XOM+stock%22+OR+%22XOM+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20251220000000&enddatetime=20260129235959
+[retry] politeness sleep 180s
+[retry] XOM [2026-01-29..2026-03-11] (55/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[retry] stored 34 rows for XOM [2026-01-29..2026-03-11]
+[retry] politeness sleep 180s
+[retry] XOM [2026-03-11..2026-04-20] (56/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED XOM [2026-03-11..2026-04-20]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Exxon+stock%22+OR+%22Exxon+shares%22+OR+%22Exxon+earnings%22+OR+%22XOM+stock%22+OR+%22XOM+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20260311000000&enddatetime=20260420235959
+[retry] politeness sleep 180s
+[retry] XOM [2026-04-20..2026-05-31] (57/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED XOM [2026-04-20..2026-05-31]: ('Connection broken: IncompleteRead(7853 bytes read, 2387 more expected)', IncompleteRead(7853 bytes read, 2387 more expected))
+[retry] politeness sleep 180s
+[retry] XOM [2026-05-31..2026-07-10] (58/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[retry] stored 34 rows for XOM [2026-05-31..2026-07-10]
+[retry] politeness sleep 180s
+[retry] XOM [2026-07-10..2026-08-20] (59/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[retry] stored 34 rows for XOM [2026-07-10..2026-08-20]
+[retry] politeness sleep 180s
+[retry] XOM [2026-08-20..2026-09-30] (60/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[retry] stored 24 rows for XOM [2026-08-20..2026-09-30]
+[retry] politeness sleep 180s
+[retry] JNJ [2025-09-30..2025-11-09] (61/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED JNJ [2025-09-30..2025-11-09]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Johnson+%26+Johnson+stock%22+OR+%22Johnson+%26+Johnson+shares%22+OR+%22Johnson+%26+Johnson+earnings%22+OR+%22JNJ+stock%22+OR+%22JNJ+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20250930000000&enddatetime=20251109235959
+[retry] politeness sleep 180s
+[retry] JNJ [2025-11-09..2025-12-20] (62/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] stored 34 rows for JNJ [2025-11-09..2025-12-20]
+[retry] politeness sleep 180s
+[retry] JNJ [2025-12-20..2026-01-29] (63/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED JNJ [2025-12-20..2026-01-29]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Johnson+%26+Johnson+stock%22+OR+%22Johnson+%26+Johnson+shares%22+OR+%22Johnson+%26+Johnson+earnings%22+OR+%22JNJ+stock%22+OR+%22JNJ+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20251220000000&enddatetime=20260129235959
+[retry] politeness sleep 180s
+[retry] JNJ [2026-01-29..2026-03-11] (64/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[retry] FAILED JNJ [2026-01-29..2026-03-11]: ('Connection broken: IncompleteRead(7853 bytes read, 2387 more expected)', IncompleteRead(7853 bytes read, 2387 more expected))
+[retry] politeness sleep 180s
+[retry] JNJ [2026-03-11..2026-04-20] (65/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED JNJ [2026-03-11..2026-04-20]: Response ended prematurely
+[retry] politeness sleep 180s
+[retry] JNJ [2026-04-20..2026-05-31] (66/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[retry] stored 34 rows for JNJ [2026-04-20..2026-05-31]
+[retry] politeness sleep 180s
+[retry] JNJ [2026-05-31..2026-07-10] (67/69)
+[retry] stored 34 rows for JNJ [2026-05-31..2026-07-10]
+[retry] politeness sleep 180s
+[retry] JNJ [2026-07-10..2026-08-20] (68/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[gdelt] 429 rate limited, waiting 120s (attempt 4)
+[retry] FAILED JNJ [2026-07-10..2026-08-20]: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28%22Johnson+%26+Johnson+stock%22+OR+%22Johnson+%26+Johnson+shares%22+OR+%22Johnson+%26+Johnson+earnings%22+OR+%22JNJ+stock%22+OR+%22JNJ+shares%22%29+sourcelang%3Aenglish&mode=artlist&maxrecords=34&format=json&sort=datedesc&startdatetime=20260710000000&enddatetime=20260820235959
+[retry] politeness sleep 180s
+[retry] JNJ [2026-08-20..2026-09-30] (69/69)
+[gdelt] 429 rate limited, waiting 15s (attempt 1)
+[gdelt] 429 rate limited, waiting 30s (attempt 2)
+[gdelt] 429 rate limited, waiting 60s (attempt 3)
+[retry] stored 12 rows for JNJ [2026-08-20..2026-09-30]
+[retry] done: ok=29 failed=40
