@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 from signal_lab.ingest import DB_PATH, fetch_prices, store_prices
-from signal_lab.models import make_text, report_table, train
+from signal_lab.models import featurize, make_text, report_table, train
 from signal_lab.nlp import extract_baseline
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -128,7 +128,7 @@ def run_pipeline(log=print) -> dict:
     # Score every article for M4/M6.
     vec = result["vectorizer"]
     model = result["models"][best_name]
-    proba = model.predict_proba(vec.transform(make_text(df)))[:, 1]
+    proba = model.predict_proba(featurize(make_text(df), vec))[:, 1]
     scored_df = df[["url", "text", "ticker", "published_at", "pub_date"]].copy()
     scored_df["proba"] = proba
     scored_df.to_csv(ART / "scored_news.csv", index=False)

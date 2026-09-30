@@ -32,6 +32,15 @@ from sklearn.metrics import (average_precision_score, f1_score,
                              recall_score)
 from sklearn.utils import resample
 
+from signal_lab.models.lexicon import (LEXICON_FEATURE_NAMES,
+                                       lexicon_feature_matrix)
+
+try:
+    from scipy.sparse import csr_matrix, hstack as sparse_hstack
+except ImportError:  # pragma: no cover - scipy is a hard dependency
+    csr_matrix = None
+    sparse_hstack = None
+
 RANDOM_STATE = 7
 TEXT_COLS = ["title", "body_snippet"]
 
@@ -102,6 +111,18 @@ def tune_threshold(y_true, scores) -> float:
     return float(thr[best]) if best < len(thr) else 0.5
 
 
+def featurize(texts, vectorizer):
+    """Full feature matrix: TF-IDF (sparse) + 8 LM lexicon features (dense).
+
+    Used everywhere a fitted vectorizer transforms raw text (train/test
+    split, predict(), artifact scoring) so the model always sees the same
+    feature space it was trained on.
+    """
+    X_tfidf = vectorizer.transform(list(texts))
+    X_lex = csr_matrix(lexicon_feature_matrix(texts))
+    return sparse_hstack([X_tfidf, X_lex], format="csr")
+
+
 def train(df: pd.DataFrame, text_col: str = "title"):
     """Fit baseline + challengers. Returns {'models': {...}, 'reports': [...],
     'vectorizer': vec, 'positive_rate': float} on a temporal held-out split.
@@ -118,8 +139,9 @@ def train(df: pd.DataFrame, text_col: str = "title"):
 
     vec = TfidfVectorizer(max_features=5000, ngram_range=(1, 2),
                           stop_words="english", sublinear_tf=True)
-    Xtr = vec.fit_transform(texts.iloc[tr_idx])
-    Xte = vec.transform(texts.iloc[te_idx])
+    vec.fit(texts.iloc[tr_idx])
+    Xtr = featurize(texts.iloc[tr_idx], vec)
+    Xte = featurize(texts.iloc[te_idx], vec)
     ytr, yte = y[tr_idx], y[te_idx]
     pos_rate = float(y.mean())
 
@@ -189,7 +211,7 @@ def predict(model, texts: list[str], vectorizer=None, threshold: float = 0.5) ->
     the model was trained outside train() and handles raw text itself."""
     if vectorizer is None:
         raise ValueError("predict needs the fitted vectorizer from train()")
-    X = vectorizer.transform(list(texts))
+    X = featurize(texts, vectorizer)
     return [float(p) for p in model.predict_proba(X)[:, 1]]
 
 
