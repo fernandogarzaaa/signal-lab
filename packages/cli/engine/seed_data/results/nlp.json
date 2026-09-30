@@ -1,0 +1,45 @@
+{
+  "stage": "nlp",
+  "ran_at": "2026-09-30T04:53:35.848229+00:00",
+  "result": {
+    "baseline": {
+      "precision": 0.95,
+      "recall": 0.8636,
+      "f1": 0.9048,
+      "n": 99
+    },
+    "ner": {
+      "precision": 0.9,
+      "recall": 0.4091,
+      "f1": 0.5625,
+      "n": 99
+    },
+    "examples": [
+      {
+        "text": "Was Trump Aide Champagne Video a Message to QAnon ? Plus : Trayon White Trial Ends With Hung Jury",
+        "true_tickers": "NONE",
+        "entities": []
+      },
+      {
+        "text": "U . S . Stocks Lack Direction Ahead Of Key Inflation Data",
+        "true_tickers": "NONE",
+        "entities": []
+      },
+      {
+        "text": "Elon Musk Cant Sell SpaceX Shares Until 2027 . Here Who Can , and When . ",
+        "true_tickers": "NONE",
+        "entities": []
+      },
+      {
+        "text": "Anthropic $518b AI buildout hinges largely on deals that cannot be canceled , filing shows",
+        "true_tickers": "NONE",
+        "entities": []
+      },
+      {
+        "text": "Anthropic IPO : Can its $2 trillion valuation survive a $42 billion loss and massive AI spending ? ",
+        "true_tickers": "NONE",
+        "entities": []
+      }
+    ]
+  }
+}

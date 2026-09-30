@@ -1,0 +1,36 @@
+{
+  "stage": "backtest",
+  "ran_at": "2026-09-30T04:53:35.848229+00:00",
+  "result": {
+    "strategies": [
+      {
+        "name": "sentiment_momentum",
+        "return": 0.0,
+        "sharpe": 0.0,
+        "max_drawdown": 0.0,
+        "n_days": 61,
+        "paired_p": 0.8511
+      },
+      {
+        "name": "buy_and_hold",
+        "return": 0.0047,
+        "sharpe": 0.383,
+        "max_drawdown": 0.0182,
+        "n_days": 61,
+        "paired_p": null
+      },
+      {
+        "name": "random_entry",
+        "return": 0.0,
+        "sharpe": 0.0,
+        "max_drawdown": 0.0,
+        "n_days": 61,
+        "paired_p": null
+      }
+    ],
+    "significance": {
+      "sharpe_diff_p_value": 0.8511,
+      "note": "paired t-test on daily returns, sentiment_momentum vs buy_and_hold"
+    }
+  }
+}

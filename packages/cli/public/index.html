@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signal Lab — news-sentiment market event engine</title>
+<script src="/vendor/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#11151d; --panel2:#151a24; --line:#232a38;
+    --fg:#d7dce4; --dim:#8b93a3; --green:#3fb950; --red:#f47067;
+    --amber:#d29922; --blue:#58a6ff; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--fg);font-family:-apple-system,Segoe UI,Roboto,sans-serif;margin:0;padding:0 0 60px}
+  header{padding:28px 32px 18px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:16px;align-items:center}
+  header h1{font-size:26px;margin:0;letter-spacing:.5px}
+  header h1 .prompt{color:var(--green);font-family:var(--mono)}
+  header p{margin:4px 0 0;color:var(--dim);font-size:14px;max-width:640px}
+  .hdr-actions{margin-left:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  button{cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--fg);
+    padding:9px 16px;border-radius:8px;font-size:14px}
+  button:hover:not(:disabled){border-color:var(--green)}
+  button:disabled{opacity:.45;cursor:default}
+  button.primary{background:#12341f;border-color:#2a5a36;color:#b7f0c2}
+  button.primary:hover:not(:disabled){border-color:var(--green)}
+  .pill{font-family:var(--mono);font-size:12px;padding:6px 12px;border-radius:20px;border:1px solid var(--line)}
+  .pill.ok{color:var(--green);border-color:#2a5a36}
+  .pill.bad{color:var(--red);border-color:#6b2d28}
+  .pill.warn{color:var(--amber);border-color:#5a4a22}
+  main{padding:20px 32px;max-width:1200px;margin:0 auto}
+  h2{font-size:16px;text-transform:uppercase;letter-spacing:1.5px;color:var(--dim);margin:28px 0 12px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .card .row{display:flex;align-items:center;gap:10px}
+  .card h3{margin:0;font-size:15px}
+  .card p.desc{color:var(--dim);font-size:13px;margin:8px 0}
+  .card .summary{font-family:var(--mono);font-size:12px;color:var(--blue);margin:8px 0;min-height:18px}
+  .dot{width:10px;height:10px;border-radius:50%;background:#3a4152;flex:none}
+  .dot.running{background:var(--amber);animation:blink 1s infinite}
+  .dot.done{background:var(--green)}
+  .dot.failed{background:var(--red)}
+  @keyframes blink{50%{opacity:.3}}
+  .card button{margin-top:4px;font-size:13px;padding:7px 12px}
+  #console{background:#070a0f;border:1px solid var(--line);border-radius:10px;padding:14px 16px;
+    font-family:var(--mono);font-size:12.5px;line-height:1.55;height:320px;overflow-y:auto;white-space:pre-wrap}
+  #console .err{color:var(--red)} #console .out{color:#9fd6a4} #console .sys{color:var(--blue)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:900px){.grid2{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+  .panel h3{margin:0 0 10px;font-size:14px}
+  .empty{color:var(--dim);font-style:italic;font-size:13px;padding:18px;text-align:center}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:right;padding:7px 8px;border-bottom:1px solid var(--line);font-family:var(--mono)}
+  th:first-child,td:first-child{text-align:left}
+  th{color:var(--dim);font-weight:600;font-family:inherit}
+  tr.sig td{color:var(--green)}
+  .cite{display:inline-block;background:#1a2230;border:1px solid var(--line);border-radius:6px;
+    font-family:var(--mono);font-size:11px;padding:3px 8px;margin:3px 6px 3px 0;color:var(--blue)}
+  .cite .q{display:block;color:var(--dim);margin-top:2px;max-width:640px}
+  #rag-text{font-size:13.5px;line-height:1.65;white-space:pre-wrap}
+  select{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font-size:13px;max-width:100%}
+  .rag-controls{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+  canvas{max-height:300px}
+  footer{color:var(--dim);font-size:12px;text-align:center;margin-top:40px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1><span class="prompt">$</span> Signal Lab</h1>
+    <p>News-sentiment market event engine: news + prices &rarr; entity extraction &rarr;
+       sentiment classifier &rarr; event study &rarr; walk-forward backtest &rarr; cited RAG explainer.</p>
+  </div>
+  <div class="hdr-actions">
+    <span id="doctor-pill" class="pill warn">checking&hellip;</span>
+    <button id="btn-seed" title="Load the bundled demo snapshot (works offline)">Load demo snapshot</button>
+    <button id="btn-demo" class="primary">Run full demo</button>
+  </div>
+</header>
+
+<main>
+  <h2>Pipeline</h2>
+  <div class="cards" id="cards"></div>
+
+  <h2>Console <span style="text-transform:none;letter-spacing:0">(the TUI, in your browser)</span></h2>
+  <div id="console"><div class="sys">signal lab console ready. Run a stage or the full demo.</div></div>
+
+  <h2>Visuals</h2>
+  <div class="grid2">
+    <div class="panel">
+      <h3>Event abnormal returns (per event, [-1,+1] window)</h3>
+      <div id="timeline-wrap"><canvas id="timeline"></canvas></div>
+    </div>
+    <div class="panel">
+      <h3>Event study — per-event results</h3>
+      <div id="events-wrap"></div>
+    </div>
+  </div>
+  <div class="grid2" style="margin-top:16px">
+    <div class="panel">
+      <h3>Backtest — Sharpe by strategy</h3>
+      <div id="bt-wrap"><canvas id="btchart"></canvas></div>
+    </div>
+    <div class="panel">
+      <h3>Backtest — strategy comparison</h3>
+      <div id="bttable-wrap"></div>
+    </div>
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <h3>RAG explainer — cited 10-K context for an event</h3>
+    <div class="rag-controls">
+      <select id="rag-event"><option value="">Run the event study first, then pick an event&hellip;</option></select>
+      <button id="btn-explain">Explain</button>
+    </div>
+    <div id="rag-out"><div class="empty">Run the RAG stage (or pick an event and press Explain) to generate a cited explanation.</div></div>
+  </div>
+</main>
+
+<footer>signallab · the browser is the CLI · stages never fake results: failures surface here</footer>
+
+<script>
+const STAGE_INFO = [
+  ['ingest',   'Ingest',          'GDELT news + yfinance prices into DuckDB'],
+  ['nlp',      'Entities',        'Company mention to ticker extraction'],
+  ['models',   'Sentiment model', 'Classical ML on imbalanced data'],
+  ['stats',    'Event study',     'Do sentiment spikes move prices?'],
+  ['backtest', 'Backtest',        'Walk-forward strategy comparison'],
+  ['rag',      'RAG explainer',   'Cited explanations over 10-K filings'],
+];
+const state = { running:false, charts:{} };
+const $ = (id)=>document.getElementById(id);
+const empty = (msg)=>`<div class="empty">${msg}</div>`;
+
+/* ---------- console ---------- */
+function clog(text, cls){
+  const c = $('console');
+  const div = document.createElement('div');
+  if (cls) div.className = cls;
+  div.textContent = text;
+  c.appendChild(div);
+  c.scrollTop = c.scrollHeight;
+}
+const sys = (t)=>clog(t,'sys');
+
+/* ---------- api ---------- */
+async function api(p, opts){
+  const r = await fetch(p, opts);
+  const j = await r.json().catch(()=>({}));
+  if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  return j;
+}
+
+/* ---------- pipeline cards ---------- */
+function buildCards(){
+  $('cards').innerHTML = STAGE_INFO.map(([k,title,desc])=>`
+    <div class="card" id="card-${k}">
+      <div class="row"><span class="dot" id="dot-${k}"></span><h3>${title}</h3></div>
+      <p class="desc">${desc}</p>
+      <div class="summary" id="sum-${k}">not run yet</div>
+      <button data-run="${k}">Run</button>
+    </div>`).join('');
+  document.querySelectorAll('[data-run]').forEach(b=>
+    b.addEventListener('click', ()=>runStageUI(b.dataset.run)));
+}
+function setDot(k, cls){ $('dot-'+k).className = 'dot '+cls; }
+
+function summarize(stage, payload){
+  const r = payload && payload.result;
+  if (!r) return 'not run yet';
+  try{
+    if (stage==='ingest') return `${r.news_rows??'?'} news · ${r.price_rows??'?'} prices · ${(r.tickers||[]).join(', ')}`;
+    if (stage==='nlp') return `baseline F1 ${r.baseline?.f1} · NER F1 ${r.ner?.f1}`;
+    if (stage==='models') return `PR-AUC ${r.baseline?.pr_auc} → ${r.challenger?.pr_auc} (${r.challenger_name||'challenger'})`;
+    if (stage==='stats') return `${r.summary?.n_events} events · mean CAR ${r.summary?.mean_abnormal_return} · ${(r.summary?.share_significant*100)?.toFixed(1)}% sig.`;
+    if (stage==='backtest'){
+      const ss=r.strategies||[];
+      const b=ss.reduce((a,b)=>((b.sharpe??-99)>(a.sharpe??-99)?b:a),{});
+      return `best Sharpe ${b.sharpe} (${b.name}) · diff p=${r.significance?.sharpe_diff_p_value}`;
+    }
+    if (stage==='rag') return `${(r.citations||[]).length} citations · ${payload.event? payload.event.ticker+' '+payload.event.date:''}`;
+  }catch(e){ return 'ran (summary unparseable)'; }
+  return 'ran';
+}
+
+/* ---------- status / doctor ---------- */
+async function refreshAll(){
+  try{
+    const s = await api('/api/status');
+    for (const [k] of STAGE_INFO){
+      const st = s.stages[k]||{};
+      setDot(k, st.ran ? 'done' : '');
+      if (st.ran){
+        try{ $('sum-'+k).textContent = summarize(k, await api('/api/results/'+k)); }
+        catch(e){ $('sum-'+k).textContent = 'ran'; }
+      } else { $('sum-'+k).textContent='not run yet'; setDot(k,''); }
+    }
+    const pill = $('doctor-pill');
+    if (s.engine==='missing'){ pill.className='pill warn'; pill.textContent='engine not set up'; }
+    else{
+      try{
+        const d = await api('/api/doctor');
+        const bad = d.checks.filter(c=>!c.pass);
+        pill.className='pill '+(bad.length?'bad':'ok');
+        pill.textContent = bad.length? `${bad.length} check(s) failing` : 'all systems go';
+        pill.title = d.checks.map(c=>`${c.pass?'PASS':'FAIL'} ${c.name}: ${c.detail}`).join('\n');
+      }catch(e){ pill.className='pill warn'; pill.textContent='doctor unavailable'; }
+    }
+  }catch(e){ sys('status check failed: '+e.message); }
+}
+
+/* ---------- job running ---------- */
+function pollJob(job_id){
+  return new Promise((resolve)=>{
+    const t = setInterval(async ()=>{
+      try{
+        const j = await api('/api/jobs/'+job_id);
+        if (j.status==='done'||j.status==='failed'){ clearInterval(t); resolve(j); }
+      }catch(e){ /* keep polling */ }
+    }, 1000);
+  });
+}
+function streamLogs(job_id, stage){
+  const es = new EventSource('/api/logs/'+job_id);
+  es.onmessage = (ev)=>{
+    try{ const l=JSON.parse(ev.data); clog(l.text, l.s==='err'?'err':'out'); }catch(e){}
+  };
+  es.addEventListener('done', (ev)=>{
+    try{
+      const j=JSON.parse(ev.data);
+      sys(j.status==='done' ? `— ${stage}: done —` : `— ${stage}: FAILED — ${j.error||''}`);
+    }catch(e){}
+    es.close();
+  });
+  es.onerror = ()=>es.close();
+  return es;
+}
+async function runStageUI(stage, extraArgs){
+  if (state.running) { sys('a run is already in progress'); return null; }
+  state.running = true;
+  setDot(stage,'running');
+  sys(`$ signallab run ${stage}`);
+  let job;
+  try{
+    job = await api('/api/run/'+stage, {method:'POST',
+      headers:{'Content-Type':'application/json'}, body:JSON.stringify({args:extraArgs||[]})});
+  }catch(e){ sys('start failed: '+e.message); setDot(stage,'failed'); state.running=false; return null; }
+  const es = streamLogs(job.job_id, stage);
+  const done = await pollJob(job.job_id);
+  try{ es.close(); }catch(e){}
+  if (done.status==='done'){
+    setDot(stage,'done');
+    try{ $('sum-'+stage).textContent = summarize(stage, await api('/api/results/'+stage)); }catch(e){}
+  } else {
+    setDot(stage,'failed');
+    sys('error: '+(done.error||'unknown'));
+  }
+  state.running = false;
+  await renderVisuals();
+  return done;
+}
+async function runFullDemo(){
+  if (state.running) return;
+  sys('=== full demo: running all 6 stages in order ===');
+  for (const [k] of STAGE_INFO){
+    const done = await runStageUI(k);
+    if (!done || done.status!=='done'){ sys(`demo stopped at ${k}`); break; }
+  }
+  sys('=== demo finished ===');
+  await refreshAll();
+}
+
+/* ---------- visuals ---------- */
+function killChart(id){ if (state.charts[id]){ state.charts[id].destroy(); delete state.charts[id]; } }
+const CH = {color:'#8b93a3', grid:'#1c2330'};
+
+async function renderVisuals(){
+  // event study visuals
+  try{
+    const p = await api('/api/results/stats');
+    const r = p.result||{};
+    const evs = r.events||[];
+    if (evs.length){
+      const labels = evs.map(e=>`${e.ticker} ${e.date}`);
+      const data = evs.map(e=>e.abnormal_return);
+      const cols = evs.map(e=>!e.significant? '#3a4152' : (e.abnormal_return>=0? '#3fb950':'#f47067'));
+      killChart('timeline');
+      state.charts.timeline = new Chart($('timeline'), {type:'bar',
+        data:{labels, datasets:[{data, backgroundColor:cols}]},
+        options:{plugins:{legend:{display:false}},
+          scales:{x:{ticks:{color:CH.color},grid:{color:CH.grid}},
+                  y:{ticks:{color:CH.color,callback:v=>(v*100).toFixed(1)+'%'},grid:{color:CH.grid}}}}});
+      $('events-wrap').innerHTML = `<table><tr><th>ticker</th><th>date</th><th>abn. ret</th><th>t</th><th>p</th></tr>`+
+        evs.map(e=>`<tr class="${e.significant?'sig':''}"><td>${e.ticker}</td><td>${e.date}</td>`+
+          `<td>${(e.abnormal_return*100).toFixed(2)}%</td><td>${e.t_stat}</td><td>${e.p_value}</td></tr>`).join('')+`</table>`;
+      const sel = $('rag-event');
+      sel.innerHTML = evs.map((e,i)=>`<option value="${i}">${e.ticker} · ${e.date} · ${(e.abnormal_return*100).toFixed(2)}%</option>`).join('');
+      sel._events = evs;
+    } else { $('events-wrap').innerHTML = empty('No events yet.'); }
+  }catch(e){ $('events-wrap').innerHTML = empty('Run the stage to generate this visual.'); }
+
+  // backtest visuals
+  try{
+    const p = await api('/api/results/backtest');
+    const ss = (p.result||{}).strategies||[];
+    if (ss.length){
+      killChart('btchart');
+      state.charts.btchart = new Chart($('btchart'), {type:'bar',
+        data:{labels:ss.map(s=>s.name), datasets:[{data:ss.map(s=>s.sharpe),
+          backgroundColor:['#3fb950','#58a6ff','#8b93a3']}]},
+        options:{plugins:{legend:{display:false}},
+          scales:{x:{ticks:{color:CH.color},grid:{color:CH.grid}},
+                  y:{ticks:{color:CH.color},grid:{color:CH.grid}}}}});
+      $('bttable-wrap').innerHTML = `<table><tr><th>strategy</th><th>return</th><th>sharpe</th><th>max DD</th><th>p (vs bnh)</th></tr>`+
+        ss.map(s=>`<tr><td>${s.name}</td><td>${s.return==null?'n/a':(s.return*100).toFixed(2)+'%'}</td>`+
+          `<td>${s.sharpe??'n/a'}</td><td>${s.max_drawdown==null?'n/a':(s.max_drawdown*100).toFixed(2)+'%'}</td>`+
+          `<td>${s.paired_p??'—'}</td></tr>`).join('')+`</table>`;
+    } else { $('bttable-wrap').innerHTML = empty('No strategies yet.'); }
+  }catch(e){
+    $('bttable-wrap').innerHTML = empty('Run the stage to generate this visual.');
+  }
+
+  // rag panel: show cached explanation if present
+  try{
+    const p = await api('/api/results/rag');
+    renderRag(p.result);
+  }catch(e){ /* keep placeholder */ }
+}
+
+function renderRag(r){
+  if (!r){ $('rag-out').innerHTML = empty('No explanation yet.'); return; }
+  const cites = (r.citations||[]).map(c=>
+    `<span class="cite">[${c.chunk_id}]<span class="q">“${c.quote||''}”${c.source?` — ${c.source}`:''}</span></span>`).join('');
+  $('rag-out').innerHTML =
+    `<div id="rag-text"></div><div style="margin-top:10px">${cites||'<span class="empty">no citations</span>'}</div>`;
+  $('rag-text').textContent = r.text||'';
+}
+
+async function explainSelected(){
+  const sel = $('rag-event');
+  const ev = sel._events && sel._events[Number(sel.value)];
+  if (!ev){ sys('pick an event first'); return; }
+  $('btn-explain').disabled = true;
+  sys(`$ signallab run rag --event '{"ticker":"${ev.ticker}","date":"${ev.date}"}'`);
+  const done = await runStageUI('rag', ['--event', JSON.stringify({ticker: ev.ticker, date: ev.date})]);
+  if (done && done.status==='done'){
+    try{ renderRag((await api('/api/results/rag')).result); }catch(e){}
+  }
+  $('btn-explain').disabled = false;
+}
+
+/* ---------- wire up ---------- */
+buildCards();
+$('btn-demo').addEventListener('click', runFullDemo);
+$('btn-explain').addEventListener('click', explainSelected);
+$('btn-seed').addEventListener('click', async ()=>{
+  if (state.running) return;
+  sys('$ signallab seed');
+  try{
+    const r = await api('/api/seed',{method:'POST'});
+    sys(`seeded ${r.copied.length} files`);
+    await refreshAll(); await renderVisuals();
+  }catch(e){ sys('seed failed: '+e.message); }
+});
+refreshAll().then(renderVisuals);
+</script>
+</body>
+</html>
