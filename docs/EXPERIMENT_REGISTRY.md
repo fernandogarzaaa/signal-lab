@@ -26,5 +26,6 @@ the research program that left no committed trace are not counted.
 |---|---|---|---|
 | EXP-027 | 2026-10-01 | Gate-2 retest: FinBERT primary arm, TF-IDF arm, widened dev data; pre-registered in docs/GATE_2_PREREGISTRATION.md | docs/GATE_2.md (pending) |
 | EXP-028 | 2026-10-01 | STEP 2: leakage check on early-fold price signal (purge/embargo re-run, shuffled labels, injected future feature) | report section (pending) |
+| EXP-029 | 2026-10-01 | STEP 0a: SPY-gap integrity check. Rebuilt the original gate-1 frame (909 pre-widening rows) with SPY truncated to >= 2024-10-15 (pre-backfill state) vs full backfilled SPY. Result: 0 differing cells across all 49 columns; the fallback market leg was used on 325 pre-2024-10-15 dates but none fed any label or feature. Gate-1 results unchanged. Script: scripts/gate2_step0_spy_check.py, scripts/gate2_step0_spy_fulldiff.py | this row |
 
-**Tested-experiment count: 28** (26 baseline + 2 gate-2).
+**Tested-experiment count: 29** (26 baseline + 3 gate-2).
