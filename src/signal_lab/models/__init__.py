@@ -189,7 +189,12 @@ def _take_rows(dense_extra, idx):
     return np.asarray(dense_extra)[idx]
 
 
-def train(df: pd.DataFrame, text_col: str = "title", dense_extra=None):
+def train(
+    df: pd.DataFrame,
+    text_col: str = "title",
+    dense_extra=None,
+    train_label_col: str | None = None,
+):
     """Fit baseline + challengers. Returns {'models': {...}, 'reports': [...],
     'vectorizer': vec, 'positive_rate': float} on a temporal held-out split.
 
@@ -197,6 +202,11 @@ def train(df: pd.DataFrame, text_col: str = "title", dense_extra=None):
     dense_extra: optional DataFrame/ndarray of extra dense features with one
     row per df row, in df order (0.3.0 WS3 market-context features); it is
     split with the same temporal indices as the text matrix.
+    train_label_col: optional column of training labels (float 0/1, NaN =
+    abstain). When set, the model trains on those labels but every test
+    metric is still computed against ``label`` (the fixed evaluation
+    target). Rows with NaN are excluded from training only, never from
+    the test split.
     """
     df = df.dropna(subset=[text_col, "label", "published_at"]).reset_index(drop=True)
     if text_col == "title":
@@ -205,6 +215,28 @@ def train(df: pd.DataFrame, text_col: str = "title", dense_extra=None):
         texts = df[text_col].fillna("").astype(str)
     y = df["label"].astype(int).values
     tr_idx, te_idx = temporal_split(pd.to_datetime(df["published_at"]))
+    if train_label_col is not None:
+        if train_label_col not in df.columns:
+            raise ValueError(
+                f"train_label_col={train_label_col!r} not in df columns"
+            )
+        ytr_all = df[train_label_col].astype(float).values
+        keep = ~np.isnan(ytr_all[tr_idx])
+        if keep.sum() == 0:
+            raise ValueError(
+                f"train_label_col={train_label_col!r}: no usable training rows"
+            )
+        if len(np.unique(ytr_all[tr_idx][keep])) < 2:
+            raise ValueError(
+                f"train_label_col={train_label_col!r}: fewer than 2 classes "
+                "in the training split"
+            )
+        tr_idx = tr_idx[keep]
+        ytr = ytr_all[tr_idx].astype(int)
+    else:
+        ytr = y[tr_idx]
+    yte = y[te_idx]
+    pos_rate = float(y.mean())
 
     vec = TfidfVectorizer(
         max_features=5000, ngram_range=(1, 2), stop_words="english", sublinear_tf=True
@@ -216,7 +248,6 @@ def train(df: pd.DataFrame, text_col: str = "title", dense_extra=None):
     Xte = featurize(
         texts.iloc[te_idx], vec, dense_extra=_take_rows(dense_extra, te_idx)
     )
-    ytr, yte = y[tr_idx], y[te_idx]
     pos_rate = float(y.mean())
 
     models: dict = {}
