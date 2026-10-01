@@ -68,6 +68,11 @@ def load_news_prices(db_path: str | Path | None = None,
     finally:
         con.close()
     scored_df = pd.read_csv(scored_path, parse_dates=["published_at"])
+    # Workstream 3: fold in freshly polled monitor scores so the explain
+    # and analogue views see new articles. Monitor rows win on URL
+    # conflicts; unscored monitor rows are dropped (they need a proba).
+    from signal_lab.monitor import merge_scored
+    scored_df = merge_scored(scored_df)
     return news_df, prices_df, scored_df
 
 

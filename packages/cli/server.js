@@ -193,8 +193,79 @@ function createApp() {
       ['--ticker', p.ticker, '--date', p.date, '--k', String(p.k)]);
   });
 
+  // Watchlist monitor (workstream 3): near-real-time GDELT polling.
+  function watchlistTicker(req, res) {
+    const ticker = String(req.body.ticker || req.params.ticker || '').toUpperCase().trim();
+    if (!/^[A-Z0-9.\-]{1,8}$/.test(ticker)) {
+      res.status(400).json({ error: 'bad ticker: 1-8 chars A-Z 0-9 . - (e.g. MSFT)' });
+      return null;
+    }
+    if (!venvExists()) {
+      res.status(400).json({ error: 'engine not set up — run `signallab setup` first' });
+      return null;
+    }
+    return ticker;
+  }
+
+  // Fire-and-forget engine run: a poll cycle takes minutes (GDELT + bodies
+  // + scoring), so the HTTP response returns immediately and the dashboard
+  // reads the fresh state from /api/watchlist afterwards.
+  function runMonitorPoll() {
+    const child = spawn(venvPython(), ['-m', 'signal_lab.monitor', '--poll', '--json'],
+      { cwd: PKG_ROOT, env: { ...process.env, PYTHONPATH: ENGINE_DIR } });
+    let err = '';
+    child.stderr.on('data', (d) => { err += d; });
+    child.on('error', (e) => console.log(`[monitor] failed to start poll: ${e.message}`));
+    child.on('close', (code) => {
+      if (code !== 0) {
+        console.log(`[monitor] poll exited with code ${code}: ${String(err).split('\n').filter(Boolean).slice(-5).join(' | ').slice(0, 500)}`);
+      } else {
+        console.log('[monitor] background poll finished');
+      }
+    });
+  }
+
+  app.get('/api/watchlist', (req, res) => {
+    if (!venvExists()) {
+      return res.status(400).json({ error: 'engine not set up — run `signallab setup` first' });
+    }
+    runEngineModule(res, 'signal_lab.monitor', ['--watchlist-json']);
+  });
+
+  app.post('/api/watchlist', (req, res) => {
+    const ticker = watchlistTicker(req, res);
+    if (!ticker) return;
+    runEngineModule(res, 'signal_lab.monitor', ['--watchlist-add', ticker]);
+  });
+
+  app.delete('/api/watchlist/:ticker', (req, res) => {
+    const ticker = watchlistTicker(req, res);
+    if (!ticker) return;
+    runEngineModule(res, 'signal_lab.monitor', ['--watchlist-remove', ticker]);
+  });
+
+  app.post('/api/monitor/poll', (req, res) => {
+    if (!venvExists()) {
+      return res.status(400).json({ error: 'engine not set up — run `signallab setup` first' });
+    }
+    runMonitorPoll();
+    res.status(202).json({ ok: true, message: 'poll started in the background; refresh /api/watchlist for the fresh state' });
+  });
+
   // Fallback to the dashboard for any other route.
   app.get('*', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
+
+  // Workstream 3: background GDELT polling. GDELT refreshes roughly every
+  // 15 minutes, so the default cadence matches it; polling faster buys
+  // nothing. SIGNAL_LAB_MONITOR_MINUTES=0 disables the interval (manual
+  // polls via POST /api/monitor/poll still work).
+  const monitorMinutes = Number(process.env.SIGNAL_LAB_MONITOR_MINUTES || '15');
+  if (monitorMinutes > 0 && venvExists()) {
+    const ms = monitorMinutes * 60 * 1000;
+    console.log(`[monitor] background polling every ${monitorMinutes} min (first run in 60s; SIGNAL_LAB_MONITOR_MINUTES=0 to disable)`);
+    setTimeout(() => { console.log('[monitor] initial poll starting'); runMonitorPoll(); }, 60 * 1000);
+    setInterval(() => { console.log('[monitor] scheduled poll starting'); runMonitorPoll(); }, ms);
+  }
 
   return app;
 }
