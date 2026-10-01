@@ -1,0 +1,101 @@
+ticker,company
+AAPL,Apple
+ABBV,AbbVie
+ABT,Abbott
+ACN,Accenture
+ADBE,Adobe
+AMAT,Applied Materials
+AMD,AMD
+AMGN,Amgen
+AMT,American Tower
+AMZN,Amazon
+ANET,Arista
+AVGO,Broadcom
+AXP,American Express
+BA,Boeing
+BAC,Bank of America
+BKNG,Booking
+BLK,BlackRock
+BMY,Bristol Myers
+BNY,BNY Mellon
+BRK-B,Berkshire Hathaway
+C,Citigroup
+CAT,Caterpillar
+CMCSA,Comcast
+COF,Capital One
+COP,ConocoPhillips
+COST,Costco
+CRM,Salesforce
+CSCO,Cisco
+CVS,CVS Health
+CVX,Chevron
+DE,Deere
+DELL,Dell
+DHR,Danaher
+DIS,Disney
+DUK,Duke Energy
+EMR,Emerson
+FDX,FedEx
+GD,General Dynamics
+GE,GE Aerospace
+GEV,GE Vernova
+GILD,Gilead
+GM,General Motors
+GOOGL,Alphabet
+GS,Goldman Sachs
+HD,Home Depot
+IBM,IBM
+INTC,Intel
+INTU,Intuit
+ISRG,Intuitive Surgical
+JNJ,Johnson & Johnson
+JPM,JPMorgan
+KO,Coca-Cola
+LIN,Linde
+LLY,Eli Lilly
+LMT,Lockheed Martin
+LOW,Lowe's
+LRCX,Lam Research
+MA,Mastercard
+MCD,McDonald's
+MDLZ,Mondelez
+MDT,Medtronic
+META,Meta
+MMM,3M
+MO,Altria
+MRK,Merck
+MS,Morgan Stanley
+MSFT,Microsoft
+MU,Micron
+NEE,NextEra
+NFLX,Netflix
+NOW,ServiceNow
+NVDA,Nvidia
+ORCL,Oracle
+PANW,Palo Alto Networks
+PEP,PepsiCo
+PFE,Pfizer
+PG,Procter & Gamble
+PLTR,Palantir
+PM,Philip Morris
+QCOM,Qualcomm
+RTX,RTX
+SBUX,Starbucks
+SCHW,Charles Schwab
+SNDK,Sandisk
+SO,Southern Company
+T,AT&T
+TMO,Thermo Fisher
+TMUS,T-Mobile
+TSLA,Tesla
+TXN,Texas Instruments
+UBER,Uber
+UNH,UnitedHealth
+UNP,Union Pacific
+UPS,UPS
+USB,US Bancorp
+V,Visa
+VZ,Verizon
+WFC,Wells Fargo
+WMT,Walmart
+XOM,ExxonMobil
