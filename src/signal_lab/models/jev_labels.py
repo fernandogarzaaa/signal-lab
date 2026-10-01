@@ -27,20 +27,50 @@ from pathlib import Path
 TYPESAFE_CLI = Path.home() / "workspace/skills/typesafe/bin/typesafe.py"
 
 QUESTION_ID = "sentiment"
+# Prompt v2 (2026-10-01): tightened after a 150-article human-labeling session
+# showed Jev over-triggering directional labels on no-signal content
+# (Jev-vs-human 3-class kappa 0.48, binary kappa 0.87). The neutral rules
+# below are the main fix: ticker-specificity plus an explicit no-signal list.
 INSTRUCTIONS = (
-    "Read the news headline and snippet. What is the sentiment of this news "
-    "for the company named? Choose positive if it is good news for the company "
-    "(earnings beat, upgrade, strong growth, positive outlook). Choose negative "
-    "if it is bad news (earnings miss, downgrade, scandal, weak outlook). "
-    "Choose neutral if there is no clear directional sentiment (routine "
-    "announcements, mixed signals, or content not really about the company)."
+    "You are labeling financial news to train a stock-prediction model. "
+    "Read the headline and snippet, then judge: would a shareholder of the "
+    "given TICKER buy or sell that stock tomorrow because of this news? "
+    "Judge as of the publication date, with no hindsight about what the "
+    "stock actually did.\n\n"
+    "Choose positive only for concrete good news about THIS ticker: earnings "
+    "beat, raised guidance, analyst upgrade, major contract win, product "
+    "launch, M&A development, strong trial or financial results.\n\n"
+    "Choose negative only for concrete bad news about THIS ticker: earnings "
+    "miss, cut guidance, analyst downgrade, lawsuit, scandal, regulatory "
+    "action, CEO departure, major insider selling by company officers.\n\n"
+    "Choose neutral for all of these common no-signal cases: backward-looking "
+    "price recaps ('shares down 1.7%', 'trading up 2%'); routine fund "
+    "position filings (a fund buying or selling shares); pundit opinion or "
+    "'should you buy' pieces with no new facts; macroeconomic commentary not "
+    "about the company; articles about a DIFFERENT company than the ticker; "
+    "spam or content-free snippets; genuinely mixed signals. When torn "
+    "between neutral and a weak directional call, choose neutral."
 )
 CRITERIA = {
-    "positive": "good news for the company",
-    "negative": "bad news for the company",
-    "neutral": "no clear directional sentiment for the company",
+    "positive": "concrete good news about this ticker that would make a "
+                "shareholder buy",
+    "negative": "concrete bad news about this ticker that would make a "
+                "shareholder sell",
+    "neutral": "no concrete directional news for this ticker (price recap, "
+               "fund filing, opinion, macro, wrong company, spam, or mixed)",
 }
 LABEL_TO_INT = {"positive": 1, "negative": 0, "neutral": 2}
+PROMPT_VERSION = "v2-2026-10-01"
+
+
+def build_state(item: dict, snippet_chars: int = 800) -> str:
+    """Render one article as the Jev decision state."""
+    snippet = (item.get("body_snippet") or "")[:snippet_chars]
+    return (
+        f"Ticker: {item.get('ticker', '')}\n"
+        f"Title: {item.get('title', '')}\n"
+        f"Snippet: {snippet}"
+    )
 
 
 def jev_decide(state: str, timeout: int = 60) -> dict:
@@ -71,8 +101,7 @@ def cmd_label(args, log=print) -> Path:
     labeled = 0
     total_in, total_out = 0, 0
     for it in todo:
-        state = f"Ticker: {it.get('ticker', '')}\nTitle: {it.get('title', '')}\n" \
-                f"Snippet: {(it.get('body_snippet') or '')[:800]}"
+        state = build_state(it)
         for attempt in range(3):
             try:
                 ans = jev_decide(state)
@@ -87,6 +116,7 @@ def cmd_label(args, log=print) -> Path:
         it["jev_confidence"] = ans["confidence"]
         it["jev_probabilities"] = ans["probabilities"]
         it["jev_model"] = payload.get("jev_model", "jev-latest")
+        it["jev_prompt"] = PROMPT_VERSION
         labeled += 1
         out_path.write_text(json.dumps(payload, indent=2))
         if labeled % 10 == 0:

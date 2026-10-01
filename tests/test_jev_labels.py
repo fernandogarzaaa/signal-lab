@@ -4,7 +4,14 @@ import json
 from argparse import Namespace
 from pathlib import Path
 
-from signal_lab.models.jev_labels import cmd_agree
+from signal_lab.models.jev_labels import (
+    CRITERIA,
+    INSTRUCTIONS,
+    LABEL_TO_INT,
+    PROMPT_VERSION,
+    build_state,
+    cmd_agree,
+)
 
 
 def _payload(tmp_path: Path) -> Path:
@@ -41,3 +48,43 @@ def test_agree_excludes_neutral_and_unlabeled(tmp_path):
     assert out["fn"] == 1  # weak=0, jev=1 (weak missed a Jev positive)
     assert out["weak_positive_rate"] == 0.5
     assert out["jev_positive_rate"] == 1.0
+
+
+def test_build_state_formats_fields():
+    item = {"ticker": "AAPL", "title": "Apple beats",
+            "body_snippet": "x" * 2000}
+    state = build_state(item)
+    assert "Ticker: AAPL" in state
+    assert "Title: Apple beats" in state
+    assert state.count("x") == 800  # snippet truncated
+
+
+def test_build_state_handles_missing_fields():
+    state = build_state({})
+    assert "Ticker: " in state
+    assert "Title: " in state
+    assert "Snippet: " in state
+
+
+def test_prompt_version_is_stamped():
+    assert PROMPT_VERSION.startswith("v2-")
+
+
+def test_instructions_cover_neutral_rules():
+    # Regression guard: the v2 prompt must keep the neutral no-signal rules
+    # learned from the 150-article human-labeling session.
+    lowered = INSTRUCTIONS.lower()
+    for phrase in [
+        "would a shareholder",  # ticker-specific buy/sell framing
+        "no hindsight",  # publication-date judgment
+        "price recaps",  # backward-looking price chatter -> neutral
+        "fund",  # routine fund filings -> neutral
+        "different company",  # ticker mismatches -> neutral
+        "choose neutral",  # tie-break toward neutral
+    ]:
+        assert phrase in lowered, f"missing from INSTRUCTIONS: {phrase!r}"
+
+
+def test_criteria_cover_all_labels():
+    assert set(CRITERIA) == set(LABEL_TO_INT) == {"positive", "negative", "neutral"}
+    assert all(CRITERIA[k].strip() for k in CRITERIA)
