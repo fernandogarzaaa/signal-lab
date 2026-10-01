@@ -28,7 +28,7 @@ def _payload(tmp_path: Path, n: int = 3) -> Path:
 
 def test_label_marks_items_and_saves(tmp_path, monkeypatch, capsys):
     p = _payload(tmp_path, 2)
-    answers = iter(["1", "0 beat"])
+    answers = iter(["1 h", "0 m beat"])
     monkeypatch.setattr("builtins.input", lambda *a, **k: next(answers))
     out = cmd_label(Namespace(in_path=str(p)), log=lambda *a, **k: None)
     assert out["labeled_now"] == 2
@@ -52,7 +52,7 @@ def test_label_never_shows_weak_label(tmp_path, monkeypatch, capsys):
 
 def test_label_quit_keeps_progress(tmp_path, monkeypatch):
     p = _payload(tmp_path, 3)
-    answers = iter(["1", "q"])
+    answers = iter(["1 h", "q"])
     monkeypatch.setattr("builtins.input", lambda *a, **k: next(answers))
     out = cmd_label(Namespace(in_path=str(p)), log=lambda *a, **k: None)
     assert out["labeled_now"] == 1
@@ -63,7 +63,7 @@ def test_label_quit_keeps_progress(tmp_path, monkeypatch):
 
 def test_label_skip_leaves_null(tmp_path, monkeypatch):
     p = _payload(tmp_path, 2)
-    answers = iter(["s", "0"])
+    answers = iter(["s", "0 h"])
     monkeypatch.setattr("builtins.input", lambda *a, **k: next(answers))
     cmd_label(Namespace(in_path=str(p)), log=lambda *a, **k: None)
     data = json.loads(p.read_text())
@@ -77,7 +77,29 @@ def test_label_skips_already_labeled(tmp_path, monkeypatch):
     data["items"][0]["human_label"] = 1
     p.write_text(json.dumps(data))
     seen: list[str] = []
-    monkeypatch.setattr("builtins.input", lambda *a, **k: seen.append("x") or "0")
+    monkeypatch.setattr("builtins.input", lambda *a, **k: seen.append("x") or "0 h")
     out = cmd_label(Namespace(in_path=str(p)), log=lambda *a, **k: None)
     assert out["labeled_now"] == 1  # only the unlabeled item was presented
     assert len(seen) == 1
+
+
+def test_label_neutral_with_confidence(tmp_path, monkeypatch):
+    p = _payload(tmp_path, 2)
+    answers = iter(["2 m mixed signals", "1 h"])
+    monkeypatch.setattr("builtins.input", lambda *a, **k: next(answers))
+    cmd_label(Namespace(in_path=str(p)), log=lambda *a, **k: None)
+    data = json.loads(p.read_text())
+    assert data["items"][0]["human_label"] == 2
+    assert data["items"][0]["human_confidence"] == "m"
+    assert data["items"][0]["human_note"] == "mixed signals"
+    assert data["items"][1]["human_confidence"] == "h"
+
+
+def test_label_permanent_skip(tmp_path, monkeypatch):
+    p = _payload(tmp_path, 2)
+    answers = iter(["x", "1 h"])
+    monkeypatch.setattr("builtins.input", lambda *a, **k: next(answers))
+    out = cmd_label(Namespace(in_path=str(p)), log=lambda *a, **k: None)
+    data = json.loads(p.read_text())
+    assert data["items"][0]["human_label"] == "x"
+    assert out["labeled_now"] == 1
