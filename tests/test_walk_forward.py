@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from signal_lab.models.labels import LabelConfig
 from signal_lab.models.walk_forward import run_walk_forward, walk_forward_splits
 
 
@@ -50,23 +51,74 @@ def test_embargo_drops_post_test_start_rows():
     assert not embargoed_zone.any()
 
 
+def _wf_frame(n=120, start="2026-01-05", seed=0):
+    """Synthetic frame for the 0.6.0 run_walk_forward: one article per
+    trading day, published 15:00 UTC (10:00 ET, during hours, so t0 is the
+    pub date), t1 = t0 + 3 trading days, random abnormal returns.
+
+    Returns (df, trading_days_ordinals). The frame is clipped to the frozen
+    development period (t0 <= 2026-06-30), matching make_splits, and one
+    strong positive is forced into each quartile so every fold's train and
+    test blocks contain both classes deterministically.
+    """
+    rng = np.random.default_rng(seed)
+    days = pd.bdate_range(start, periods=n + 3)
+    d_dates = [d.date() for d in days[:n]]
+    df = pd.DataFrame(
+        {
+            "published_at": pd.to_datetime(
+                [d + pd.Timedelta(hours=15) for d in days[:n]], utc=True
+            ),
+            "pub_date": d_dates,
+            "ticker": "AAA",
+            "text": [
+                "apple stock rises on earnings beat" if i % 3 else "market flat today"
+                for i in range(n)
+            ],
+            "t0": d_dates,
+            "t1": [d.date() for d in days[3 : n + 3]],
+            "abn_ret": rng.normal(0, 0.02, n),
+            "ctx_asof": [(d - pd.offsets.BDay(1)).date() for d in days[:n]],
+        }
+    )
+    # Clip to the development period, exactly as make_splits does.
+    df = df[pd.to_datetime(df["t0"]) <= "2026-06-30"].reset_index(drop=True)
+    m = len(df)
+    # One forced positive per quartile: every fold's train/test has both classes.
+    for frac in (1 / 8, 3 / 8, 5 / 8, 7 / 8):
+        df.loc[int(m * frac), "abn_ret"] = 0.10
+    trading_days = np.sort(
+        np.array([d.date().toordinal() for d in days], dtype=np.int64)
+    )
+    return df, trading_days
+
+
 def test_run_walk_forward_structure_and_aggregates():
-    df = _frame(n=150)
-    result = run_walk_forward(df, n_splits=3, log=lambda *a, **k: None, purge_days=2, embargo_days=2, min_train=10)
+    df, trading_days = _wf_frame()
+    cfg = LabelConfig(attention_min_articles=1).validated()
+    result = run_walk_forward(
+        df, n_splits=3, trading_days=trading_days, label_cfg=cfg,
+        log=lambda *a, **k: None, min_train=10,
+    )
     assert result["n_splits"] == 3
     assert len(result["folds"]) == 3
     for f in result["folds"]:
         assert f["n_train"] > 0 and f["n_test"] > 0
         assert 0.0 <= f["pr_auc"] <= 1.0
         assert f["n_train_pos"] + f["n_test_pos"] <= len(df)
+        assert f["n_purged"] >= 0 and f["n_embargoed"] >= 0
+        assert "cutoff" in f  # per-fold cutoff, train-only
     agg = result["aggregate"]["pr_auc"]
     assert agg["ci95"][0] <= agg["mean"] <= agg["ci95"][1]
     assert agg["std"] >= 0
+    assert result["validation"]["periods"]["development"]["t0_end"] == "2026-06-30"
 
 
 def test_run_walk_forward_deterministic():
-    df = _frame(n=150)
-    kw = dict(n_splits=3, log=lambda *a, **k: None, purge_days=2, embargo_days=2, min_train=10)
+    df, trading_days = _wf_frame()
+    cfg = LabelConfig(attention_min_articles=1).validated()
+    kw = dict(n_splits=3, trading_days=trading_days, label_cfg=cfg,
+              log=lambda *a, **k: None, min_train=10)
     r1 = run_walk_forward(df, **kw)
     r2 = run_walk_forward(df, **kw)
     assert r1["folds"] == r2["folds"]
@@ -74,12 +126,22 @@ def test_run_walk_forward_deterministic():
 
 
 def test_run_walk_forward_with_dense_extra():
-    df = _frame(n=150)
+    df, trading_days = _wf_frame()
+    cfg = LabelConfig(attention_min_articles=1).validated()
     extra = pd.DataFrame(
         {"ctx_vol20_pct": np.random.default_rng(1).random(150)},
     )
-    result = run_walk_forward(df, dense_extra=extra, n_splits=3, log=lambda *a, **k: None, purge_days=2, embargo_days=2, min_train=10)
+    result = run_walk_forward(
+        df, dense_extra=extra, n_splits=3, trading_days=trading_days,
+        label_cfg=cfg, log=lambda *a, **k: None, min_train=10,
+    )
     assert len(result["folds"]) == 3
+
+
+def test_run_walk_forward_requires_trading_days():
+    df, _ = _wf_frame()
+    with pytest.raises(ValueError, match="trading_days"):
+        run_walk_forward(df, n_splits=3, log=lambda *a, **k: None)
 
 
 def test_min_train_guards_degenerate_folds():
@@ -89,13 +151,15 @@ def test_min_train_guards_degenerate_folds():
 
 
 def test_single_class_fold_is_skipped_loudly():
-    # All-negative early block: fold 1's train has one class and must be
-    # recorded as skipped, not crash or fabricate a metric.
-    df = _frame(n=150)
-    df.loc[df.index[:60], "label"] = 0
+    # All-identical early abnormal returns: fold 1's train labels collapse
+    # to one class and the fold must be recorded as skipped, not crash or
+    # fabricate a metric.
+    df, trading_days = _wf_frame()
+    df.loc[df.index[:35], "abn_ret"] = -1.0
+    cfg = LabelConfig(attention_min_articles=1).validated()
     result = run_walk_forward(
-        df, n_splits=3, purge_days=2, embargo_days=2, min_train=10,
-        log=lambda *a, **k: None,
+        df, n_splits=3, trading_days=trading_days, label_cfg=cfg,
+        min_train=10, log=lambda *a, **k: None,
     )
     assert len(result["skipped_folds"]) >= 1
     assert all("train classes" in s["reason"] for s in result["skipped_folds"])
@@ -108,16 +172,20 @@ def test_folds_carry_roc_auc_ranking_metric():
     the ranking analogue of PR-AUC. Perfect ranking -> 1.0."""
     rng = np.random.default_rng(3)
     n = 200
-    dates = pd.date_range("2026-01-01", periods=n, freq="D", tz="UTC")
-    # Text perfectly separates the label: ranking must be (near) perfect.
-    texts = ["great earnings beat profit surge"] * n
-    labels = (rng.random(n) < 0.2).astype(int)
-    texts = ["great earnings beat profit surge" if l else "market flat today"
-             for l in labels]
-    df = pd.DataFrame({"published_at": dates, "text": texts, "label": labels})
+    df, trading_days = _wf_frame(n=n, seed=3)
+    # Abnormal returns perfectly aligned with the text signal (clipped to
+    # the dev-period rows _wf_frame kept).
+    is_pos = rng.random(n) < 0.2
+    is_pos = is_pos[: len(df)]
+    df["abn_ret"] = np.where(is_pos, 0.05, -0.05)
+    df["text"] = [
+        "great earnings beat profit surge" if p else "market flat today"
+        for p in is_pos
+    ]
+    cfg = LabelConfig(attention_min_articles=1).validated()
     result = run_walk_forward(
-        df, n_splits=3, purge_days=2, embargo_days=2, min_train=10,
-        log=lambda *a, **k: None,
+        df, n_splits=3, trading_days=trading_days, label_cfg=cfg,
+        min_train=10, log=lambda *a, **k: None,
     )
     assert result["folds"], "expected scored folds"
     for f in result["folds"]:

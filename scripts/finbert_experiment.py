@@ -21,7 +21,10 @@ from scipy.sparse import csr_matrix, hstack as sparse_hstack
 sys.path.insert(0, "/home/hatch/workspace/signal-lab/src")
 
 from signal_lab.models import featurize, make_text
-from signal_lab.models.build_and_train import build_dataset
+from signal_lab.models.build_and_train import (
+    build_dataset,
+    load_trading_calendar_days,
+)
 from signal_lab.models.novelty import load_embedding
 from signal_lab.models.run import add_label_args, label_config_from_args
 from signal_lab.models.walk_forward import run_walk_forward
@@ -93,10 +96,12 @@ def main() -> None:
         "(g) tfidf+lexicon+finbert+ctx": arm_g,
     }
     results = {}
+    trading_days = load_trading_calendar_days()
     for name, fn in arms.items():
         print(f"[finbert-exp] arm {name}", flush=True)
         res = run_walk_forward(
-            df, dense_extra=dense_all, n_splits=3, purge_days=3,
+            df, dense_extra=dense_all, n_splits=3,
+            trading_days=trading_days, label_cfg=label_cfg,
             embargo_days=3, featurize_fn=fn, log=lambda *a, **k: None,
         )
         pr = [f["pr_auc"] for f in res["folds"]]

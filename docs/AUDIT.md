@@ -194,3 +194,33 @@ not significant. The backtest number is additionally optimistic per 4f.
 6. Leakage tripwires: shuffled-labels-near-chance test, injected
    future-feature test, per-fold overlap assertions, scaler/calibrator
    fit-window tests.
+
+### Phase 1 completion notes (2026-10-01)
+
+All six items shipped in `src/signal_lab/validation/` (timing, periods,
+splits, labels, dedupe, point_in_time) with rewired
+`models/{labels,walk_forward,build_and_train}.py`. 209 tests pass.
+
+Findings worth recording:
+
+- **4c/4d measured delta: 0.00151** on 2026-10-01 data (global vs per-fold
+  cutoff). Small on this dataset, but the mechanism is fixed regardless.
+- **Deliberate purge-scope deviation** (see docs/PERIODS.md): purge is
+  j == k only, not j <= k as the spec text said. Purging earlier folds
+  collapses the expanding window (29/29/29 vs 29/61/92 rows). Flagged for
+  maintainer review in the Phase 1 PR.
+- **attention_enabled bug**: `run_walk_forward` and `final_train_and_test`
+  applied the attention filter even when disabled. Fixed; both use an
+  all-ones mask when `attention_enabled=False`.
+- **Cut snapping**: positional cuts in `make_splits` now snap to t0
+  boundaries so a day's rows are never split across train/test.
+- **Leakage canary**: injected future text in the purge zone scores
+  PR-AUC 1.0 without purge, 0.5 (chance) with purge
+  (tests/test_leakage.py). The `purge=False` escape hatch exists only for
+  this test.
+- **Real-data smoke**: 3-fold purged walk-forward on 1,227 rows
+  (816 dev) gives mean PR-AUC 0.165, consistent with the 0.127 baseline
+  direction. One fold skipped (single-class test set), handled gracefully.
+- **ctx_asof added** to `build_context_features` output: the point-in-time
+  anchor (latest trading day strictly before publication) now flows through
+  `build_dataset` and is asserted by `point_in_time.check_frame`.

@@ -12,6 +12,7 @@ from signal_lab.models.gold_set import (
 from signal_lab.models.labels import (
     LabelConfig,
     apply_attention,
+    apply_legacy_labeling,
     baseline_config,
     build_labels,
     forward_cumulative_abnormal,
@@ -37,13 +38,15 @@ def _prices():
     return pd.DataFrame(rows)
 
 
-def _news(rows):
-    """rows: list of (url, ticker, pub_date_str)."""
+def _news(rows, hour=15):
+    """rows: list of (url, ticker, pub_date_str). Publication time defaults
+    to 15:00 UTC = 10:00 ET (during market hours, so t0 == pub_date);
+    pass hour=10 for a pre-open ET timestamp."""
     return pd.DataFrame(
         [
             {
                 "url": u,
-                "published_at": pd.Timestamp(p),
+                "published_at": pd.Timestamp(p) + pd.Timedelta(hours=hour),
                 "pub_date": pd.Timestamp(p).date(),
                 "ticker": t,
             }
@@ -94,6 +97,7 @@ def test_baseline_reproduces_legacy_t1_labeling():
         ]
     )
     got, _ = build_labels(news, prices, baseline_config())
+    got, _ = apply_legacy_labeling(got, baseline_config())
 
     # legacy 0.2.0 computation, written out in full
     p = prices.sort_values(["ticker", "date"]).copy()
@@ -131,6 +135,7 @@ def test_windowed_labels_differ_from_t1_when_news_digests_slowly():
     )
     cfg = LabelConfig(window_days=2, quantile=0.5, attention_enabled=False)
     got, _ = build_labels(news, _prices(), cfg)
+    got, _ = apply_legacy_labeling(got, cfg)
     by_url = dict(zip(got["url"], got["label"]))
     # both BBB articles see the +20% inside a 2-day window; AAA sees nothing
     assert by_url["u1"] == 1 and by_url["u2"] == 1
@@ -146,9 +151,11 @@ def test_partial_windows_dropped_and_reported():
         ]
     )  # 3 forward days left
     cfg = LabelConfig(window_days=3, quantile=0.5, attention_enabled=False)
-    got, block = build_labels(news, prices, cfg)
+    got, info = build_labels(news, prices, cfg)
     assert set(got["url"]) == {"u2"}
-    assert block["partial_window_rows_dropped"] == 1
+    # u1's t1 (t0 + 3 trading days) runs past the last price date
+    assert info["too_recent_dropped"] == 1
+    assert info["partial_window_rows_dropped"] == 0
 
 
 def test_attention_min_articles():
@@ -219,7 +226,8 @@ def test_label_config_block_shape():
             ("u4", "BBB", "2026-01-06"),
         ]
     )
-    got, block = build_labels(news, _prices(), cfg)
+    got, _ = build_labels(news, _prices(), cfg)
+    got, block = apply_legacy_labeling(got, cfg)
     assert set(block) == {
         "scheme",
         "window_days",
@@ -250,23 +258,44 @@ def test_label_config_block_shape():
 
 def test_build_labels_column_contract():
     """build_labels returns the documented column contract (the DB-touching
-    build_dataset wrapper is exercised in the integration check, not here)."""
+    build_dataset wrapper is exercised in the integration check, not here).
+
+    0.6.0: no ``label`` column and no attention filtering here; the cutoff
+    and attention quantiles are train-only statistics (validation.labels),
+    and the legacy global-cutoff behavior lives in apply_legacy_labeling.
+    """
     cfg = LabelConfig(window_days=2, quantile=0.5, attention_enabled=False)
     news = _news([("u1", "BBB", "2026-01-06"), ("u2", "AAA", "2026-01-06")])
-    got, block = build_labels(news, _prices(), cfg)
+    got, info = build_labels(news, _prices(), cfg)
     assert list(got.columns) == [
         "url",
         "ticker",
         "published_at",
         "pub_date",
+        "t0",
+        "t1",
         "fwd_days",
         "n_articles",
         "ticker_fwd_ret",
         "mkt_fwd_ret",
         "abn_ret",
-        "label",
     ]
-    assert block["n_labeled"] == 2
+    assert info["n_rows"] == 2
+    assert set(info) == {
+        "scheme",
+        "window_days",
+        "quantile",
+        "benchmark",
+        "n_rows",
+        "too_recent_dropped",
+        "partial_window_rows_dropped",
+    }
+
+    # The legacy path still produces the old column contract + label column.
+    legacy, block = apply_legacy_labeling(got, cfg)
+    assert "label" in legacy.columns
+    assert set(legacy["label"].unique()) <= {0, 1}
+    assert block["n_labeled"] == len(legacy)
 
 
 # --- gold set -------------------------------------------------------------
