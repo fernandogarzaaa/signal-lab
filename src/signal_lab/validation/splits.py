@@ -78,6 +78,23 @@ class WalkForwardConfig:
         return self
 
 
+def _check_windows(t0_ord: np.ndarray, t1_ord: np.ndarray, where: str) -> None:
+    """Fail loudly on inverted label windows (t1 < t0).
+
+    Cross-check note (APP-006, eslazarev/purged-cross-validation
+    ``validate_times``): a label window that ends before it starts is a
+    corrupt input, not an edge case. The purge rule ``t1 >= ts_k`` would
+    silently misbehave on such rows, so we reject them up front.
+    """
+    bad = t1_ord < t0_ord
+    if bool(bad.any()):
+        first = int(np.flatnonzero(bad)[0])
+        raise ValueError(
+            f"[splits] {where}: inverted label window at row {first} "
+            f"(t1 < t0); refusing to build splits on corrupt windows"
+        )
+
+
 def _to_ord(s: pd.Series) -> np.ndarray:
     return pd.to_datetime(s).dt.date.apply(lambda d: d.toordinal()).to_numpy(dtype=np.int64)
 
@@ -142,6 +159,7 @@ def make_splits(
 
     t0_ord = _to_ord(work["t0"])
     t1_ord = _to_ord(work["t1"])
+    _check_windows(t0_ord, t1_ord, "make_splits")
     pub_ord = pd.to_datetime(work["published_at"], utc=True).astype(np.int64).to_numpy()
     # Deterministic order: t0, tie-broken by publication time.
     order = np.lexsort((pub_ord, t0_ord))
@@ -245,6 +263,7 @@ def purge_against(
     """
     t0o = _to_ord(t0)
     t1o = _to_ord(t1)
+    _check_windows(t0o, t1o, "purge_against")
     ts, te = test_start.toordinal(), test_end.toordinal()
     overlap = (t0o <= te) & (t1o >= ts)
     return pd.Series(~overlap, index=t0.index)
@@ -279,6 +298,7 @@ def single_purged_split(
         )
     t0_ord = _to_ord(work["t0"])
     t1_ord = _to_ord(work["t1"])
+    _check_windows(t0_ord, t1_ord, "single_purged_split")
     pub_ord = pd.to_datetime(work["published_at"], utc=True).astype(np.int64).to_numpy()
     order = np.lexsort((pub_ord, t0_ord))
     t0s, t1s = t0_ord[order], t1_ord[order]
