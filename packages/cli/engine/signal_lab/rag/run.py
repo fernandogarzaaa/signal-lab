@@ -21,6 +21,28 @@ from signal_lab import sanitize_json
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ART = REPO_ROOT / "data" / "artifacts"
+DB = REPO_ROOT / "data" / "signal_lab.duckdb"
+
+
+def _title_for_url(url: str) -> str:
+    """Headline lookup in DuckDB news_raw.
+
+    scored_news.csv carries no title column (it was always read as ""), so
+    join on url against news_raw. Missing DB or missing url -> "".
+    """
+    if not DB.exists():
+        return ""
+    import duckdb
+    try:
+        con = duckdb.connect(str(DB), read_only=True)
+        try:
+            row = con.execute(
+                "SELECT title FROM news_raw WHERE url = ?", [url]).fetchone()
+        finally:
+            con.close()
+    except Exception:
+        return ""
+    return str(row[0] or "") if row else ""
 
 
 def run_explain(event_json: str, log=print) -> dict:
@@ -37,7 +59,7 @@ def run_explain(event_json: str, log=print) -> dict:
             cand = scored[(scored["ticker"] == ticker) & (scored["pub_date"] == str(date))]
             if not cand.empty:
                 top = cand.sort_values("proba", ascending=False).iloc[0]
-                headline = str(top.get("title", "") or "")
+                headline = _title_for_url(str(top["url"]))
     log(f"[m6] explaining {ticker} @ {date}")
     result = explain({"ticker": ticker, "event_date": date, "headline": headline or ""})
     for c in result["citations"]:

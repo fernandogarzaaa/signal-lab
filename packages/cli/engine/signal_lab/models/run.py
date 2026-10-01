@@ -24,6 +24,19 @@ Labeling flags (0.3.0 workstream 1):
                          filter (keep only the min-articles rule)
   --benchmark TICKER     market benchmark for abnormal returns (default SPY)
 
+Training-label flags (Jev workstream, 2026-10-01):
+  --train-labels {weak,jev,jev-conf06}
+                         training-label source (default weak = price-derived,
+                         reproducible). jev trains on Jev-judged directional
+                         labels only (Jev neutrals abstain from training);
+                         jev-conf06 additionally drops directionals with
+                         confidence < 0.6. Test metrics are always computed
+                         against weak labels. Jev sources need the label file
+                         (see --jev-labels-path); the default path is
+                         data/jev_labels_full.json.
+  --jev-labels-path PATH path to the Jev labeling output JSON (default
+                         data/jev_labels_full.json, relative to the repo)
+
 Feature flags (0.3.0 workstream 2):
   --finbert              also run the FinBERT ablation (TF-IDF vs FinBERT-only
                          vs combined, same data/split) and add the
@@ -112,9 +125,19 @@ def label_config_from_args(args) -> LabelConfig:
 
 
 def run_comparison(
-    log=print, label_cfg: LabelConfig | None = None, finbert: bool = False
+    log=print,
+    label_cfg: LabelConfig | None = None,
+    finbert: bool = False,
+    train_labels: str = "weak",
+    jev_labels_path: str | None = None,
 ) -> dict:
-    result = run_pipeline(log=log, label_cfg=label_cfg, finbert=finbert)
+    result = run_pipeline(
+        log=log,
+        label_cfg=label_cfg,
+        finbert=finbert,
+        train_labels=train_labels,
+        jev_labels_path=jev_labels_path,
+    )
     by_name = {r.name: r for r in result["reports"]}
     log(
         f"[m3] best model: {result['best_model']}",
@@ -135,6 +158,7 @@ def run_comparison(
         "n_train": result["n_train"],
         "n_test": result["n_test"],
         "label_config": result["label_config"],
+        "train_labels": result["train_labels"],
         "finbert_ablation": result["finbert_ablation"],
         "feature_importance": result["feature_importance"],
     }
@@ -153,6 +177,19 @@ def main() -> None:
         help="also run the FinBERT ablation (opt-in; downloads ~440MB on "
         "first use, falls back cleanly offline)",
     )
+    ap.add_argument(
+        "--train-labels",
+        choices=["weak", "jev", "jev-conf06"],
+        default="weak",
+        help="training-label source (default: weak). jev/jev-conf06 train "
+        "on Jev-judged labels; test metrics always use weak labels",
+    )
+    ap.add_argument(
+        "--jev-labels-path",
+        default=None,
+        help="path to the Jev labeling output JSON (default: "
+        "data/jev_labels_full.json)",
+    )
     add_label_args(ap)
     args = ap.parse_args()
     log = (lambda *a, **k: print(*a, file=sys.stderr, **k)) if args.json else print
@@ -169,7 +206,13 @@ def main() -> None:
             "[m3] note: --label-scheme baseline pins the 0.2.0 labeling; "
             "other labeling flags are ignored"
         )
-    result = run_comparison(log=log, label_cfg=label_cfg, finbert=args.finbert)
+    result = run_comparison(
+        log=log,
+        label_cfg=label_cfg,
+        finbert=args.finbert,
+        train_labels=args.train_labels,
+        jev_labels_path=args.jev_labels_path,
+    )
     if args.json:
         print(json.dumps(sanitize_json(result)))
     else:

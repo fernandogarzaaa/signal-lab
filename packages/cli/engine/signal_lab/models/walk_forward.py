@@ -128,6 +128,8 @@ def run_walk_forward(
     min_train: int = 50,
     featurize_fn=None,
     log=print,
+    train_label_col: str | None = None,
+    train_label_source: str | None = None,
 ) -> dict:
     """Run purged walk-forward CV of the challenger pipeline.
 
@@ -138,6 +140,10 @@ def run_walk_forward(
     matrix`` overriding the default TF-IDF + lexicon + dense_extra
     construction (used to ablate feature groups, e.g. drop the lexicon).
     Defaults to ``signal_lab.models.featurize``.
+    train_label_col: optional column of alternate training labels. When
+    set, fold training uses these labels (NaN abstentions are excluded
+    from the train fold) while test folds are always scored against the
+    weak ``label`` column, so the evaluation target never moves.
     """
     work = df.dropna(subset=["published_at", "label"]).reset_index(drop=True)
     if "text" not in work.columns:
@@ -145,6 +151,12 @@ def run_walk_forward(
         work["text"] = make_text(work)
     texts = work["text"].fillna("").astype(str)
     y = work["label"].astype(int).values
+    if train_label_col is not None:
+        if train_label_col not in work.columns:
+            raise ValueError(f"train_label_col={train_label_col!r} not in df columns")
+        train_labels_all = work[train_label_col].astype(float).values
+    else:
+        train_labels_all = None
     featurize_fn = featurize_fn or featurize
 
     splits = walk_forward_splits(
@@ -160,14 +172,32 @@ def run_walk_forward(
     skipped = []
     for sp in splits:
         tri, tei = sp["train_idx"], sp["test_idx"]
-        ytr_all, yte_all = y[tri], y[tei]
+        yte_all = y[tei]
+        if train_labels_all is not None:
+            keep = ~np.isnan(train_labels_all[tri])
+            tri_eff = tri[keep]
+            ytr_all = train_labels_all[tri_eff].astype(int)
+        else:
+            tri_eff = tri
+            ytr_all = y[tri]
         # A fold with one class in train or test cannot be scored: skip it
         # loudly (recorded in the output) rather than crashing or faking
         # a metric. Single-class early folds are a data property, not a bug.
+        # With alternate training labels the check runs on the post-abstention
+        # train labels, and folds left with too few directional rows after
+        # abstention exclusion are skipped for the same reason.
         if len(np.unique(ytr_all)) < 2 or len(np.unique(yte_all)) < 2:
             reason = (
                 f"train classes={sorted(map(int, np.unique(ytr_all)))}, "
                 f"test classes={sorted(map(int, np.unique(yte_all)))}"
+            )
+            log(f"[wf] fold {sp['fold']}: SKIPPED ({reason})")
+            skipped.append({"fold": sp["fold"], "reason": reason})
+            continue
+        if len(tri_eff) < min_train:
+            reason = (
+                f"only {len(tri_eff)} train rows after abstention exclusion "
+                f"(min_train={min_train})"
             )
             log(f"[wf] fold {sp['fold']}: SKIPPED ({reason})")
             skipped.append({"fold": sp["fold"], "reason": reason})
@@ -179,10 +209,10 @@ def run_walk_forward(
             stop_words="english",
             sublinear_tf=True,
         )
-        vec.fit(texts.iloc[tri])
-        Xtr = featurize_fn(texts.iloc[tri], vec, dense_extra=_take_rows(dense_extra, tri))
+        vec.fit(texts.iloc[tri_eff])
+        Xtr = featurize_fn(texts.iloc[tri_eff], vec, dense_extra=_take_rows(dense_extra, tri_eff))
         Xte = featurize_fn(texts.iloc[tei], vec, dense_extra=_take_rows(dense_extra, tei))
-        ytr, yte = y[tri], y[tei]
+        ytr, yte = ytr_all, yte_all
 
         clf = LogisticRegression(
             max_iter=1000, class_weight="balanced", random_state=RANDOM_STATE
@@ -196,7 +226,7 @@ def run_walk_forward(
                 "fold": sp["fold"],
                 "test_start": sp["test_start"].isoformat(),
                 "test_end": sp["test_end"].isoformat(),
-                "n_train": int(len(tri)),
+                "n_train": int(len(tri_eff)),
                 "n_test": int(len(tei)),
                 "n_train_pos": int(ytr.sum()),
                 "n_test_pos": int(yte.sum()),
@@ -209,7 +239,7 @@ def run_walk_forward(
             }
         )
         log(
-            f"[wf] fold {sp['fold']}: train={len(tri)} test={len(tei)} "
+            f"[wf] fold {sp['fold']}: train={len(tri_eff)} test={len(tei)} "
             f"pos_rate={yte.mean():.3f} pr_auc={rep.pr_auc:.4f} f1={rep.f1:.4f}"
         )
 
@@ -241,6 +271,12 @@ def run_walk_forward(
         "purge_days": purge_days,
         "embargo_days": embargo_days,
         "model": "logreg_balanced",
+        "train_labels": {
+            "source": train_label_source
+            if train_label_source is not None
+            else ("weak" if train_label_col is None else train_label_col),
+            "test_labels": "weak (fixed evaluation target)",
+        },
         "folds": folds,
         "skipped_folds": skipped,
         "aggregate": {
@@ -269,11 +305,27 @@ def main() -> None:
         action="store_true",
         help="print only the JSON result to stdout (logs to stderr)",
     )
+    ap.add_argument(
+        "--train-labels",
+        choices=["weak", "jev", "jev-conf06"],
+        default="weak",
+        help="training label source: weak (price-derived, default) or Jev-judged "
+        "labels (opt-in). Test folds are always scored against weak labels.",
+    )
+    ap.add_argument(
+        "--jev-labels-path",
+        default="data/jev_labels_full.json",
+        help="path to the Jev labels JSON (required unless --train-labels weak)",
+    )
 
     # Late import: building the dataset needs the DB and the full pipeline.
     from signal_lab.models.build_and_train import build_dataset
     from signal_lab.models.context_features import CONTEXT_FEATURE_NAMES
     from signal_lab.models.run import add_label_args, label_config_from_args
+    from signal_lab.models.train_labels import (
+        TRAIN_LABEL_COL,
+        apply_train_labels,
+    )
 
     add_label_args(ap)
     args = ap.parse_args()
@@ -281,6 +333,12 @@ def main() -> None:
 
     label_cfg = label_config_from_args(args).validated()
     df, _label_block = build_dataset(log=log, label_cfg=label_cfg)
+    if args.train_labels != "weak":
+        df = apply_train_labels(
+            df, args.train_labels, jev_path=args.jev_labels_path, log=log
+        )
+        log(f"[wf] train labels: source={args.train_labels}")
+    train_label_col = TRAIN_LABEL_COL if args.train_labels != "weak" else None
     ctx = df[CONTEXT_FEATURE_NAMES]
     featurize_fn = None
     if args.repr == "finbert_ctx":
@@ -296,6 +354,8 @@ def main() -> None:
         embargo_days=label_cfg.window_days + 2,
         featurize_fn=featurize_fn,
         log=log,
+        train_label_col=train_label_col,
+        train_label_source=args.train_labels,
     )
     result["representation"] = args.repr
     ART.mkdir(parents=True, exist_ok=True)
