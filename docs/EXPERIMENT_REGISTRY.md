@@ -30,3 +30,14 @@ the research program that left no committed trace are not counted.
 | EXP-030 | 2026-10-01 | STEP 1: bulk news-source access verification (EXPLORATORY). GDELT bulk GKG verified: free, no auth, no documented rate limit, HTTPS, predictable 15-min slots, 27-col TSV, Extras carries PAGE_PRECISEPUBTIMESTAMP + PAGE_TITLE. Measured throughput 1.4-2.2 MB/s from this box -> pre-registered 3-year pull projects to 38-78h, infeasible in-session. BigQuery gdelt-bq.gdeltv2.gkg exists but needs GCP creds (unavailable). Hard stop triggered -> docs/NEGATIVE_RESULT.md fallback. | docs/NEGATIVE_RESULT.md |
 
 **Tested-experiment count: 30** (26 baseline + 4 gate-2).
+
+## Extraction program (APPLIED product improvements, 2026-10-01)
+
+The research program is CLOSED (see docs/PROGRAM_STATUS.md). The
+items below are product improvements for the explanatory workbench,
+extracted from the open-source survey. They are not gate experiments
+and carry no predictive claims.
+
+| ID | Date (UTC) | Item | Result pointer |
+|---|---|---|---|
+| APP-000 | 2026-10-01 | Program closure note | docs/PROGRAM_STATUS.md |
