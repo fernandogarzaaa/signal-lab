@@ -208,37 +208,69 @@ def label_config_block(
     }
 
 
+def _trading_calendars(prices: pd.DataFrame) -> dict[str, np.ndarray]:
+    """Ticker -> sorted array of trading ``datetime.date``."""
+    p = prices.copy()
+    p["date"] = pd.to_datetime(p["date"]).dt.date
+    return {
+        t: np.sort(g["date"].unique())
+        for t, g in p.groupby("ticker")
+    }
+
+
 def build_labels(
     news: pd.DataFrame, prices: pd.DataFrame, config: LabelConfig
 ) -> tuple[pd.DataFrame, dict]:
-    """Attach weak labels to news articles.
+    """Attach weak-label *inputs* to news articles (Phase 1: t0-anchored).
 
     ``news`` needs columns: url, published_at, pub_date, ticker (ticker
     extraction happens upstream in build_and_train). ``prices`` needs
     columns: ticker, date, close.
 
-    Returns (labeled_df, label_config). labeled_df columns: url, ticker,
-    published_at, pub_date, fwd_days, n_articles (0 when the attention
-    filter is off), ticker_fwd_ret, mkt_fwd_ret, abn_ret, label.
+    Methodology change (2026-10-01, documented): the forward window is now
+    anchored at t0, the first tradable time after publication
+    (``signal_lab.validation.timing``), not at the publication calendar
+    date. For during-hours and weekend publication this agrees with the
+    old scheme; for after-close publication it moves the window one
+    trading day later, so the first measured return can actually be
+    traded on.
+
+    Returns (df, info). df columns: url, ticker, published_at, pub_date,
+    t0, t1, fwd_days, n_articles, ticker_fwd_ret, mkt_fwd_ret, abn_ret.
+    There is deliberately NO ``label`` column and NO attention filtering
+    here: the cutoff and the attention quantiles are sample statistics and
+    must be computed on train data only (audit findings 4c/4d). Use
+    ``apply_legacy_labeling`` for the old global-cutoff behavior (kept
+    for CLI compatibility), or ``signal_lab.validation.labels`` for the
+    per-fold honest path.
     """
+    from signal_lab.validation.timing import compute_t0, compute_t1
+
     config = config.validated()
+    cals = _trading_calendars(prices)
+    tickers = news["ticker"].to_numpy()
+    t0 = compute_t0(news["published_at"], cals, tickers)
+    t1 = compute_t1(t0, cals, tickers, config.window_days)
+
     fwd = forward_cumulative_abnormal(prices, config)
-    df = news.merge(
-        fwd, left_on=["ticker", "pub_date"], right_on=["ticker", "date"], how="left"
+    df = news.copy()
+    df["t0"] = t0.values
+    df["t1"] = t1.values
+    df = df.merge(
+        fwd, left_on=["ticker", "t0"], right_on=["ticker", "date"], how="left"
     )
     df = df.dropna(subset=["abn_ret"]).reset_index(drop=True)
+    too_recent = int(df["t1"].isna().sum())
+    df = df[df["t1"].notna()].reset_index(drop=True)
     partial_dropped = int((df["fwd_days"] < config.window_days).sum())
     df = df[df["fwd_days"] >= config.window_days].reset_index(drop=True)
 
-    attention_info = None
-    if config.attention_enabled:
-        df, attention_info = apply_attention(
-            df,
-            min_articles=config.attention_min_articles,
-            top_quartile=config.attention_top_quartile,
-        )
-    else:
-        df["n_articles"] = 0
+    # Per (ticker, pub_date) article counts, unfiltered: the validation
+    # runner applies the attention rule per fold with train-only quantiles.
+    day_counts = (
+        df.groupby(["ticker", "pub_date"]).size().rename("n_articles").reset_index()
+    )
+    df = df.merge(day_counts, on=["ticker", "pub_date"], how="left")
 
     if df.empty:
         raise ValueError(
@@ -247,19 +279,59 @@ def build_labels(
             "than the latest prices, or entity extraction found no tickers). "
             "Ingest an older news window before training."
         )
-    cutoff = float(df["abn_ret"].quantile(config.quantile))
-    df["label"] = (df["abn_ret"] >= cutoff).astype(int)
-    block = label_config_block(df, config, cutoff, attention_info, partial_dropped)
+    info = {
+        "scheme": config.scheme,
+        "window_days": config.window_days,
+        "quantile": float(config.quantile),
+        "benchmark": config.benchmark,
+        "n_rows": len(df),
+        "too_recent_dropped": too_recent,
+        "partial_window_rows_dropped": int(partial_dropped),
+    }
     cols = [
         "url",
         "ticker",
         "published_at",
         "pub_date",
+        "t0",
+        "t1",
         "fwd_days",
         "n_articles",
         "ticker_fwd_ret",
         "mkt_fwd_ret",
         "abn_ret",
-        "label",
     ]
-    return df[cols].reset_index(drop=True), block
+    return df[cols].reset_index(drop=True), info
+
+
+def apply_legacy_labeling(
+    df: pd.DataFrame, config: LabelConfig
+) -> tuple[pd.DataFrame, dict]:
+    """Old global-cutoff labeling (audit finding 4c/4d), kept for CLI
+    compatibility.
+
+    Applies the attention filter and the top-quantile cutoff computed on
+    the FULL frame, exactly as 0.3.0-0.5.1 did. No validation path may
+    use this; it exists so ``python -m signal_lab.models.run`` and the
+    single-split ``train()`` keep working while the honest per-fold path
+    lives in ``signal_lab.validation.labels``.
+    """
+    config = config.validated()
+    attention_info = None
+    if config.attention_enabled:
+        df, attention_info = apply_attention(
+            df,
+            min_articles=config.attention_min_articles,
+            top_quartile=config.attention_top_quartile,
+        )
+    else:
+        df = df.copy()
+        df["n_articles"] = 0
+    if df.empty:
+        raise ValueError("[labels] no rows survived the legacy attention filter")
+    cutoff = float(df["abn_ret"].quantile(config.quantile))
+    df = df.copy()
+    df["label"] = (df["abn_ret"] >= cutoff).astype(int)
+    partial_dropped = int((df["fwd_days"] < config.window_days).sum())
+    block = label_config_block(df, config, cutoff, attention_info, partial_dropped)
+    return df.reset_index(drop=True), block

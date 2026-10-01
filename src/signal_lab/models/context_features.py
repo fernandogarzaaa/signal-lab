@@ -246,11 +246,13 @@ def build_context_features(
     (optional) needs the same columns for sector ETFs; when omitted, the
     sector leg falls back to ``benchmark`` and the choice is logged.
 
-    Returns a DataFrame with columns ``["url"] + CONTEXT_FEATURE_NAMES``,
-    in the input row order and on the input index. Price features are NaN
-    for rows whose ticker has insufficient pre-publication history; the
-    caller decides how to handle them (the stage-3 pipeline drops and
-    counts them).
+    Returns a DataFrame with columns ``["url", "ctx_asof"] +
+    CONTEXT_FEATURE_NAMES``, in the input row order and on the input
+    index. ``ctx_asof`` is the latest trading day strictly before the
+    publish date (the point-in-time anchor; None where none exists).
+    Price features are NaN for rows whose ticker has insufficient
+    pre-publication history; the caller decides how to handle them
+    (the stage-3 pipeline drops and counts them).
     """
     news = news.copy()
     if "pub_date" not in news.columns:
@@ -335,4 +337,16 @@ def build_context_features(
     out["ctx_hour_bucket"] = (hours // 6).clip(0, 3).astype(float)
 
     result = pd.DataFrame({"url": news["url"].to_numpy()}, index=news.index)
+    # ctx_asof: the point-in-time anchor, the latest trading day strictly
+    # before the publish date (None where no prior trading day exists).
+    # Used by validation.point_in_time to prove features predate publication.
+    asof_dates = np.full(len(news), None, dtype=object)
+    for ticker, cal in calendars.items():
+        m = (tickers == ticker) & (pos >= 0)
+        if m.any():
+            cal_dates = np.array(
+                [pd.Timestamp.fromordinal(int(o)).date() for o in cal]
+            )
+            asof_dates[m] = cal_dates[pos[m]]
+    result["ctx_asof"] = asof_dates
     return pd.concat([result, out], axis=1)

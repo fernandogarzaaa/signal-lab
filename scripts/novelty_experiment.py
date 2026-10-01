@@ -40,7 +40,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from signal_lab import sanitize_json  # noqa: E402
-from signal_lab.models.build_and_train import build_dataset  # noqa: E402
+from signal_lab.models.build_and_train import (  # noqa: E402
+    build_dataset,
+    load_trading_calendar_days,
+)
 from signal_lab.models.context_features import CONTEXT_FEATURE_NAMES  # noqa: E402
 from signal_lab.models.novelty import NOVELTY_FEATURE_NAMES, build_novelty_features  # noqa: E402
 from signal_lab.models.run import baseline_config  # noqa: E402
@@ -112,25 +115,26 @@ def main() -> None:
     ctx_nov = pd.concat([ctx, nov], axis=1)
 
     purge = embargo = label_cfg.window_days + 2
-    log(f"[exp] folds=3 purge={purge}d embargo={embargo}d")
+    log(f"[exp] folds=3 embargo={embargo}d (purge is exact, per-fold)")
+    trading_days = load_trading_calendar_days()
 
     arms = {}
     arms["(a) baseline"] = run_walk_forward(
-        df, dense_extra=ctx, n_splits=3,
-        purge_days=purge, embargo_days=embargo, log=log,
+        df, dense_extra=ctx, n_splits=3, trading_days=trading_days,
+        label_cfg=label_cfg, embargo_days=embargo, log=log,
     )
     arms["(b) +novelty"] = run_walk_forward(
-        df, dense_extra=ctx_nov, n_splits=3,
-        purge_days=purge, embargo_days=embargo, log=log,
+        df, dense_extra=ctx_nov, n_splits=3, trading_days=trading_days,
+        label_cfg=label_cfg, embargo_days=embargo, log=log,
     )
     arms["(c) no-lexicon +novelty"] = run_walk_forward(
-        df, dense_extra=ctx_nov, n_splits=3,
-        purge_days=purge, embargo_days=embargo,
+        df, dense_extra=ctx_nov, n_splits=3, trading_days=trading_days,
+        label_cfg=label_cfg, embargo_days=embargo,
         featurize_fn=featurize_no_lexicon, log=log,
     )
     arms["(d) novelty-only"] = run_walk_forward(
-        df, dense_extra=nov, n_splits=3,
-        purge_days=purge, embargo_days=embargo,
+        df, dense_extra=nov, n_splits=3, trading_days=trading_days,
+        label_cfg=label_cfg, embargo_days=embargo,
         featurize_fn=featurize_dense_only, log=log,
     )
 

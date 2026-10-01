@@ -200,6 +200,57 @@ def _take_rows(dense_extra, idx):
     return np.asarray(dense_extra)[idx]
 
 
+def fit_challenger_candidates(
+    Xtr, ytr, sample_weight=None
+) -> dict:
+    """Fit the challenger candidate pool on (Xtr, ytr).
+
+    Shared by the legacy single-split ``train()`` and the validation
+    framework (selection on the purged validation split, final train on
+    dev). ``sample_weight`` (e.g. (ticker, t0) dedupe weights) is passed
+    to the plain, balanced, and LightGBM fits; the oversampled arm
+    ignores it (oversampling and sample weights are alternative
+    imbalance treatments; combining them would double-count the
+    minority). LightGBM is optional: if it fails to import or fit, the
+    key is omitted and the caller must handle its absence loudly.
+
+    Returns name -> fitted estimator.
+    """
+    fitted: dict = {}
+
+    lr_plain = LogisticRegression(max_iter=1000, random_state=RANDOM_STATE)
+    lr_plain.fit(Xtr, ytr, sample_weight=sample_weight)
+    fitted["logreg_plain"] = lr_plain
+
+    lr_bal = LogisticRegression(
+        max_iter=1000, class_weight="balanced", random_state=RANDOM_STATE
+    )
+    lr_bal.fit(Xtr, ytr, sample_weight=sample_weight)
+    fitted["logreg_balanced"] = lr_bal
+
+    Xtr_os, ytr_os = oversample_minority(Xtr, ytr)
+    lr_os = LogisticRegression(max_iter=1000, random_state=RANDOM_STATE)
+    lr_os.fit(Xtr_os, ytr_os)
+    fitted["logreg_oversampled"] = lr_os
+
+    try:
+        import lightgbm as lgb
+
+        neg, pos = (ytr == 0).sum(), (ytr == 1).sum()
+        gbm = lgb.LGBMClassifier(
+            n_estimators=300,
+            learning_rate=0.05,
+            scale_pos_weight=neg / max(pos, 1),
+            random_state=RANDOM_STATE,
+            verbose=-1,
+        )
+        gbm.fit(Xtr, ytr, sample_weight=sample_weight)
+        fitted["lightgbm_balanced"] = gbm
+    except Exception:  # noqa: BLE001 - LightGBM optional; absence is the caller's problem
+        pass
+    return fitted
+
+
 def train(
     df: pd.DataFrame,
     text_col: str = "title",
@@ -277,43 +328,12 @@ def train(
         )
     )
 
-    # 1. Logistic regression, no imbalance handling.
-    lr_plain = LogisticRegression(max_iter=1000, random_state=RANDOM_STATE)
-    lr_plain.fit(Xtr, ytr)
-    models["logreg_plain"] = lr_plain
-    reports.append(_metrics("logreg_plain", yte, lr_plain.predict_proba(Xte)[:, 1]))
-
-    # 2. Logistic regression, class_weight='balanced'.
-    lr_bal = LogisticRegression(
-        max_iter=1000, class_weight="balanced", random_state=RANDOM_STATE
-    )
-    lr_bal.fit(Xtr, ytr)
-    models["logreg_balanced"] = lr_bal
-    reports.append(_metrics("logreg_balanced", yte, lr_bal.predict_proba(Xte)[:, 1]))
-
-    # 3. Logistic regression on oversampled training data.
-    Xtr_os, ytr_os = oversample_minority(Xtr, ytr)
-    lr_os = LogisticRegression(max_iter=1000, random_state=RANDOM_STATE)
-    lr_os.fit(Xtr_os, ytr_os)
-    models["logreg_oversampled"] = lr_os
-    reports.append(_metrics("logreg_oversampled", yte, lr_os.predict_proba(Xte)[:, 1]))
-
-    # 4. LightGBM with scale_pos_weight.
-    try:
-        import lightgbm as lgb
-
-        neg, pos = (ytr == 0).sum(), (ytr == 1).sum()
-        gbm = lgb.LGBMClassifier(
-            n_estimators=300,
-            learning_rate=0.05,
-            scale_pos_weight=neg / max(pos, 1),
-            random_state=RANDOM_STATE,
-            verbose=-1,
-        )
-        gbm.fit(Xtr, ytr)
-        models["lightgbm_balanced"] = gbm
-        reports.append(_metrics("lightgbm_balanced", yte, gbm.predict_proba(Xte)[:, 1]))
-    except Exception as exc:  # noqa: BLE001 - LightGBM optional; document the fallback
+    # 1-4. Challenger candidates (shared with the validation framework).
+    fitted = fit_challenger_candidates(Xtr, ytr)
+    models.update(fitted)
+    for name, clf in fitted.items():
+        reports.append(_metrics(name, yte, clf.predict_proba(Xte)[:, 1]))
+    if "lightgbm_balanced" not in fitted:
         reports.append(
             ModelReport(
                 name="lightgbm_balanced",
@@ -322,11 +342,12 @@ def train(
                 f1=float("nan"),
                 pr_auc=float("nan"),
                 accuracy=float("nan"),
-                extras={"skipped": f"lightgbm unavailable: {exc}"},
+                extras={"skipped": "lightgbm unavailable or failed to fit"},
             )
         )
 
     # 5. Threshold tuning on the best linear model (tune on train, eval on test).
+    lr_bal = fitted["logreg_balanced"]
     train_scores = lr_bal.predict_proba(Xtr)[:, 1]
     thr = tune_threshold(ytr, train_scores)
     models["logreg_balanced_tuned"] = lr_bal

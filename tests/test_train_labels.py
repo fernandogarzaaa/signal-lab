@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -162,6 +163,14 @@ def test_train_label_col_missing_column_raises():
 
 
 def _wf_df(n=60, abstain_every=0, flip_train=False):
+    """Synthetic frame for the new run_walk_forward: weak labels come from
+    abn_ret via the per-fold cutoff; TRAIN_LABEL_COL carries alternate
+    (possibly flipped) train labels. Text aligns with abn_ret so a model
+    trained on consistent labels scores well."""
+    from signal_lab.models.labels import LabelConfig  # local: keeps import light
+
+    days = pd.bdate_range("2026-01-05", periods=n + 3)
+    d_dates = [d.date() for d in days[:n]]
     rows = []
     for i in range(n):
         good = i % 2 == 0
@@ -171,34 +180,55 @@ def _wf_df(n=60, abstain_every=0, flip_train=False):
             {
                 "title": f"{'good' if good else 'bad'} news {i}",
                 "body_snippet": "",
-                "published_at": pd.Timestamp("2024-01-01") + pd.Timedelta(days=i),
-                "label": int(good),
+                "published_at": (days[i] + pd.Timedelta(hours=15)).tz_localize("UTC"),
+                "pub_date": d_dates[i],
+                "ticker": "AAA",
+                "t0": d_dates[i],
+                "t1": days[i + 3].date(),
+                "abn_ret": 0.05 if good else -0.05,
+                "ctx_asof": (days[i] - pd.offsets.BDay(1)).date(),
                 TRAIN_LABEL_COL: train_label,
             }
         )
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    trading_days = np.sort(
+        np.array([d.date().toordinal() for d in days], dtype=np.int64)
+    )
+    return df, trading_days
+
+
+def _wf_kwargs(df, trading_days, **kw):
+    from signal_lab.models.labels import LabelConfig
+
+    base = dict(
+        n_splits=2,
+        trading_days=trading_days,
+        label_cfg=LabelConfig(attention_min_articles=1).validated(),
+        min_train=5,
+        log=lambda *a, **k: None,
+    )
+    base.update(kw)
+    return base
 
 
 def test_walk_forward_train_labels_swap():
     # Flipped training labels must hurt the weak-label test metrics,
     # proving the fold loop trains on the alternate labels.
+    df_f, td_f = _wf_df(flip_train=True)
+    df_c, td_c = _wf_df()
     flipped = run_walk_forward(
-        _wf_df(flip_train=True), n_splits=2, purge_days=0, embargo_days=0, min_train=5,
-        train_label_col=TRAIN_LABEL_COL, log=lambda *a, **k: None,
+        df_f, train_label_col=TRAIN_LABEL_COL, **_wf_kwargs(df_f, td_f),
     )
-    correct = run_walk_forward(
-        _wf_df(), n_splits=2, purge_days=0, embargo_days=0, min_train=5,
-        log=lambda *a, **k: None,
-    )
+    correct = run_walk_forward(df_c, **_wf_kwargs(df_c, td_c))
     f_mean = flipped["aggregate"]["pr_auc"]["mean"]
     c_mean = correct["aggregate"]["pr_auc"]["mean"]
     assert f_mean < 0.6 < c_mean, (f_mean, c_mean)
 
 
 def test_walk_forward_abstentions_excluded_from_train_only():
+    df, td = _wf_df(abstain_every=3)
     res = run_walk_forward(
-        _wf_df(abstain_every=3), n_splits=2, purge_days=0, embargo_days=0,
-        min_train=5, train_label_col=TRAIN_LABEL_COL, log=lambda *a, **k: None,
+        df, train_label_col=TRAIN_LABEL_COL, **_wf_kwargs(df, td),
     )
     assert res["folds"], "expected at least one scored fold"
     for f in res["folds"]:
@@ -208,22 +238,17 @@ def test_walk_forward_abstentions_excluded_from_train_only():
 
 
 def test_walk_forward_missing_train_label_col_raises():
+    df, td = _wf_df()
     with pytest.raises(ValueError, match="not in df columns"):
-        run_walk_forward(
-            _wf_df(), n_splits=2, purge_days=0, embargo_days=0, min_train=5,
-            train_label_col="nope", log=lambda *a, **k: None,
-        )
+        run_walk_forward(df, train_label_col="nope", **_wf_kwargs(df, td))
 
 
 def test_walk_forward_records_train_label_source():
+    df, td = _wf_df()
     res = run_walk_forward(
-        _wf_df(), n_splits=2, purge_days=0, embargo_days=0, min_train=5,
-        train_label_col=TRAIN_LABEL_COL, train_label_source="jev-conf06",
-        log=lambda *a, **k: None,
+        df, train_label_col=TRAIN_LABEL_COL, train_label_source="jev-conf06",
+        **_wf_kwargs(df, td),
     )
     assert res["train_labels"]["source"] == "jev-conf06"
-    res_weak = run_walk_forward(
-        _wf_df(), n_splits=2, purge_days=0, embargo_days=0, min_train=5,
-        log=lambda *a, **k: None,
-    )
+    res_weak = run_walk_forward(df, **_wf_kwargs(df, td))
     assert res_weak["train_labels"]["source"] == "weak"

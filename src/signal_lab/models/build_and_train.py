@@ -14,7 +14,9 @@ the label comes from the configured weak-labeling scheme in
 
 Saves:
   data/artifacts/vectorizer.pkl, model.pkl (joblib)
-  data/artifacts/scored_news.csv (url, ticker, published_at, proba for M4/M6)
+  data/artifacts/scored_news.csv (url, ticker, published_at, proba for M4/M6;
+    0.6.0: proba is the fold-test OUT-OF-SAMPLE score from purged
+    walk-forward on dev; NaN for rows never in a test block)
 
 Usage: python -m signal_lab.models.run [--label-scheme windowed|baseline ...]
 """
@@ -27,20 +29,27 @@ import duckdb
 import joblib
 import numpy as np
 import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics import average_precision_score
 
 from signal_lab.ingest import DB_PATH, fetch_prices, store_prices
 from signal_lab.models import (
+    ModelReport,
+    _metrics,
+    _take_rows,
     feature_names,
     featurize,
+    fit_challenger_candidates,
     make_text,
     report_table,
     train,
+    tune_threshold,
 )
 from signal_lab.models.context_features import (
     CONTEXT_FEATURE_NAMES,
     build_context_features,
 )
-from signal_lab.models.labels import LabelConfig, build_labels
+from signal_lab.models.labels import LabelConfig, apply_legacy_labeling, build_labels
 from signal_lab.models.lexicon import LEXICON_FEATURE_NAMES
 from signal_lab.nlp import extract_baseline
 
@@ -110,30 +119,45 @@ def build_dataset(
     news = news[ctx_ok].reset_index(drop=True)
     ctx = ctx[ctx_ok].reset_index(drop=True)
 
-    labeled, label_block = build_labels(news, prices, label_cfg)
+    labeled, label_info = build_labels(news, prices, label_cfg)
     log(
-        f"[m3] scheme={label_block['scheme']} window={label_block['window_days']}d "
-        f"attention={label_block['attention']['enabled']} "
-        f"labeled rows: {label_block['n_labeled']}, "
-        f"positive rate: {label_block['positive_rate']:.3f}, "
-        f"top-decile cutoff: {label_block['cutoff']:+.4f}"
+        f"[m3] scheme={label_info['scheme']} window={label_info['window_days']}d "
+        f"attention_filter=per-fold(train-only) "
+        f"labeled rows: {label_info['n_rows']}, "
+        f"too_recent_dropped={label_info['too_recent_dropped']}, "
+        f"partial_window_dropped={label_info['partial_window_rows_dropped']}"
     )
     labeled["text"] = news.set_index("url").loc[labeled["url"], "text"].values
-    labeled = labeled.merge(ctx[["url"] + CONTEXT_FEATURE_NAMES], on="url", how="left")
+    labeled = labeled.merge(
+        ctx[["url", "ctx_asof"] + CONTEXT_FEATURE_NAMES], on="url", how="left"
+    )
+    # Legacy global-cutoff labels, kept for the single-split train() path
+    # and CLI compatibility. The validation framework (walk-forward,
+    # final-train) does NOT use this column; it builds per-fold labels
+    # from abn_ret via signal_lab.validation.labels (audit 4c/4d).
+    legacy_labeled, label_block = apply_legacy_labeling(labeled, label_cfg)
+    log(
+        f"[m3] legacy label_config: positive_rate={label_block['positive_rate']:.3f}, "
+        f"top-decile cutoff={label_block['cutoff']:+.4f} (global; validation uses per-fold)"
+    )
     cols = [
         "url",
         "text",
         "ticker",
         "published_at",
         "pub_date",
+        "t0",
+        "t1",
         "fwd_days",
         "n_articles",
         "ticker_fwd_ret",
         "mkt_fwd_ret",
         "abn_ret",
         "label",
+        "ctx_asof",
     ] + CONTEXT_FEATURE_NAMES
-    return labeled[cols].reset_index(drop=True), label_block
+    out = legacy_labeled[cols].reset_index(drop=True)
+    return out, label_block
 
 
 def _column_std(X) -> np.ndarray:
@@ -191,6 +215,99 @@ def feature_importance_block(model_name, model, names, dense_names, X) -> dict:
     }
 
 
+def load_trading_calendar_days(log=print) -> np.ndarray:
+    """Sorted unique trading-date ordinals (union over tickers).
+
+    Used for trading-day embargo arithmetic in the validation framework.
+    """
+    import duckdb
+
+    con = duckdb.connect(DB_PATH, read_only=True)
+    dates = con.execute("SELECT DISTINCT date FROM prices_daily").fetchdf()["date"]
+    con.close()
+    ords = np.sort(
+        pd.to_datetime(dates).dt.date.apply(lambda d: d.toordinal()).unique().astype(np.int64)
+    )
+    log(f"[m3] union trading calendar: {len(ords)} days")
+    return ords
+
+
+def _prepare_fit_frame(
+    df: pd.DataFrame,
+    train_pos: np.ndarray,
+    valid_pos: np.ndarray | None,
+    label_cfg: LabelConfig,
+    train_label_col: str | None,
+    log,
+    context: str,
+) -> dict:
+    """Shared label/attention/dedupe prep for selection and final-train.
+
+    Labels are built per-fold-style: the cutoff comes from the TRAIN
+    abnormal returns only, the attention quantiles from train rows only
+    (audit 4c/4d). ``valid_pos=None`` means final-train (no eval block).
+    Same-ticker same-t0 rows are down-weighted (1/group size).
+    """
+    from signal_lab.validation import dedupe
+    from signal_lab.validation import labels as vlabels
+
+    train_df = df.iloc[train_pos]
+    if valid_pos is not None:
+        full = df.iloc[np.concatenate([train_pos, valid_pos])]
+        mask = vlabels.attention_keep_mask(
+            train_df,
+            full,
+            min_articles=label_cfg.attention_min_articles,
+            top_quartile=label_cfg.attention_top_quartile,
+        ).to_numpy()
+        tri_k = train_pos[mask[: len(train_pos)]]
+        va_k: np.ndarray | None = valid_pos[mask[len(train_pos):]]
+    else:
+        mask = vlabels.attention_keep_mask(
+            train_df,
+            train_df,
+            min_articles=label_cfg.attention_min_articles,
+            top_quartile=label_cfg.attention_top_quartile,
+        ).to_numpy()
+        tri_k = train_pos[mask]
+        va_k = None
+    if len(tri_k) == 0:
+        raise ValueError(f"[m3] {context}: attention filter emptied the train block")
+    cutoff = vlabels.fold_cutoff(df["abn_ret"].iloc[tri_k], label_cfg.quantile)
+    if train_label_col is not None:
+        if train_label_col not in df.columns:
+            raise ValueError(f"train_label_col={train_label_col!r} not in df columns")
+        ytr_all = df[train_label_col].to_numpy(dtype=float)
+        keep = ~np.isnan(ytr_all[tri_k])
+        base = tri_k[keep]
+        if len(base) == 0:
+            raise ValueError(f"[m3] {context}: no usable training rows after abstention exclusion")
+        ytr = ytr_all[base].astype(int)
+    else:
+        base = tri_k
+        ytr = vlabels.fold_labels(df["abn_ret"].iloc[base], cutoff).to_numpy()
+    if len(np.unique(ytr)) < 2:
+        raise ValueError(f"[m3] {context}: fewer than 2 classes in the train block")
+    sample_weight = dedupe.sample_weights(df.iloc[base])
+    yva = (
+        vlabels.fold_labels(df["abn_ret"].iloc[va_k], cutoff).to_numpy()
+        if va_k is not None and len(va_k)
+        else None
+    )
+    log(
+        f"[m3] {context}: train={len(base)} valid={0 if yva is None else len(yva)} "
+        f"cutoff={cutoff:+.4f} (train-only) pos_rate={ytr.mean():.3f}"
+    )
+    return {
+        "tri_eff": base,
+        "ytr": ytr,
+        "va_pos": va_k,
+        "yva": yva,
+        "sample_weight": sample_weight,
+        "cutoff": float(cutoff),
+    }
+
+
 def run_pipeline(
     log=print,
     label_cfg: LabelConfig | None = None,
@@ -198,20 +315,41 @@ def run_pipeline(
     train_labels: str = "weak",
     jev_labels_path: str | None = None,
 ) -> dict:
-    """Build dataset, train, persist artifacts. Returns the train() result,
-    with a 'label_config' block describing the labeling used and a
-    'finbert_ablation' block (0.3.0 workstream 2; opt-in via ``finbert=True``
-    or the SIGNAL_LAB_FINBERT=1 env var, offline-safe).
+    """Build dataset, select, train, persist artifacts. Returns a result
+    dict with the validation-framework blocks, plus a 'finbert_ablation'
+    block (0.3.0 workstream 2; opt-in via ``finbert=True`` or the
+    SIGNAL_LAB_FINBERT=1 env var, offline-safe).
+
+    0.6.0 protocol (Phase 1; audit findings 4b/4c/4d/4f fixed):
+
+    1. SELECTION on a single purged validation split of the development
+       period (never on a test split): every challenger candidate is fit
+       on the selection-train block and ranked by validation PR-AUC.
+    2. FINAL TRAIN on all development rows purged against the untouched
+       test period; the winner is refit and persisted as model.pkl /
+       vectorizer.pkl.
+    3. OUT-OF-SAMPLE scores from a purged walk-forward loop on dev: the
+       ``proba`` column of scored_news.csv now holds fold-test OOS
+       values (NaN for rows never in a test block: block 0, the test
+       period, and confirmation). Previously it held in-sample scores
+       from the selected model, which was optimistic by construction.
 
     train_labels selects the training-label source: "weak" (default,
     price-derived, reproducible), "jev" or "jev-conf06" (Jev-judged,
     opt-in; needs the Jev label file at jev_labels_path). Test metrics
     are always computed against weak labels.
     """
+    from signal_lab.validation import periods, point_in_time
+    from signal_lab.validation import splits as vsplits
+
     label_cfg = (label_cfg or LabelConfig()).validated()
     ART.mkdir(parents=True, exist_ok=True)
-    df, label_block = build_dataset(log=log, label_cfg=label_cfg)
+    df, label_info = build_dataset(log=log, label_cfg=label_cfg)
+    point_in_time.check_frame(df, "run_pipeline")
+    trading_days = load_trading_calendar_days(log=log)
     ctx_df = df[CONTEXT_FEATURE_NAMES]
+    texts = make_text(df)
+
     train_label_col = None
     train_labels_block: dict = {"source": train_labels}
     if train_labels != "weak":
@@ -226,40 +364,203 @@ def run_pipeline(
             df, train_labels, jev_path=effective_jev_path, log=log
         )
         ctx_df = df[CONTEXT_FEATURE_NAMES]
+        texts = make_text(df)
         train_label_col = TRAIN_LABEL_COL
         train_labels_block["jev_labels_path"] = str(effective_jev_path)
         train_labels_block["test_labels"] = "weak (fixed evaluation target)"
-    result = train(
-        df, text_col="text", dense_extra=ctx_df, train_label_col=train_label_col
+
+    vw_config = vsplits.WalkForwardConfig(
+        n_splits=2,
+        horizon_days=label_cfg.window_days,
+        embargo_days=label_cfg.window_days + 2,
     )
-    table = report_table(result)
-    log(table.to_string(index=False))
+
+    # 1. SELECTION on the purged validation split (audit 4b).
+    sp = vsplits.single_purged_split(df, vw_config, trading_days)
     log(
-        f"n_train={result['n_train']} n_test={result['n_test']} "
-        f"positive_rate={result['positive_rate']:.3f}"
+        f"[m3] selection split: valid {sp['valid_start']}..{sp['valid_end']} "
+        f"(purged {sp['n_purged']} train rows)"
+    )
+    sel = _prepare_fit_frame(
+        df, sp["train_idx"], sp["valid_idx"], label_cfg, train_label_col, log,
+        "selection",
+    )
+    vec_sel = TfidfVectorizer(
+        max_features=5000, ngram_range=(1, 2), stop_words="english", sublinear_tf=True
+    )
+    vec_sel.fit(texts.iloc[sel["tri_eff"]])
+    Xtr_sel = featurize(
+        texts.iloc[sel["tri_eff"]], vec_sel,
+        dense_extra=_take_rows(ctx_df, sel["tri_eff"]),
+    )
+    Xva_sel = featurize(
+        texts.iloc[sel["va_pos"]], vec_sel,
+        dense_extra=_take_rows(ctx_df, sel["va_pos"]),
+    )
+    fitted_sel = fit_challenger_candidates(
+        Xtr_sel, sel["ytr"], sample_weight=sel["sample_weight"]
+    )
+    va_pr = {
+        name: float(average_precision_score(sel["yva"], clf.predict_proba(Xva_sel)[:, 1]))
+        for name, clf in fitted_sel.items()
+    }
+    best_name = max(va_pr, key=va_pr.get)
+    log(
+        "[m3] selection validation PR-AUC: "
+        + ", ".join(f"{n}={v:.4f}" for n, v in sorted(va_pr.items()))
+        + f" -> best={best_name}"
     )
 
-    # Persist the best model (highest test PR-AUC among fitted models).
-    scored = [
-        (r.pr_auc, r.name) for r in result["reports"] if r.name in result["models"]
-    ]
-    best_name = max(scored)[1]
-    joblib.dump(result["vectorizer"], ART / "vectorizer.pkl")
-    joblib.dump(result["models"][best_name], ART / "model.pkl")
-    (ART / "best_model.txt").write_text(best_name)
-    log(f"[m3] saved best model: {best_name}")
+    reports: list[ModelReport] = []
+    pos_rate_sel = float(sel["ytr"].mean())
+    reports.append(
+        ModelReport(
+            name="majority_baseline",
+            precision=pos_rate_sel,
+            recall=1.0,
+            f1=2 * pos_rate_sel / (1 + pos_rate_sel) if pos_rate_sel else 0.0,
+            pr_auc=pos_rate_sel,
+            accuracy=float(1 - pos_rate_sel),
+            extras={"note": "always predicts the majority class (selection-train rate)"},
+        )
+    )
+    for name, clf in fitted_sel.items():
+        reports.append(
+            _metrics(name, sel["yva"], clf.predict_proba(Xva_sel)[:, 1],
+                     extras={"scored_on": "purged validation split"})
+        )
+    if "lightgbm_balanced" not in fitted_sel:
+        reports.append(
+            ModelReport(
+                name="lightgbm_balanced",
+                precision=float("nan"), recall=float("nan"), f1=float("nan"),
+                pr_auc=float("nan"), accuracy=float("nan"),
+                extras={"skipped": "lightgbm unavailable or failed to fit"},
+            )
+        )
+    # Threshold-tuned report on the balanced model (tune on train, eval on
+    # validation), mirroring the legacy train() report set.
+    thr = tune_threshold(sel["ytr"], fitted_sel["logreg_balanced"].predict_proba(Xtr_sel)[:, 1])
+    reports.append(
+        _metrics(
+            "logreg_balanced_tuned",
+            sel["yva"],
+            fitted_sel["logreg_balanced"].predict_proba(Xva_sel)[:, 1],
+            threshold=thr,
+            extras={"threshold_tuned_on": "selection-train", "scored_on": "purged validation split"},
+        )
+    )
+    table = report_table({"reports": reports})
+    log(table.to_string(index=False))
 
-    # Score every article for M4/M6.
-    vec = result["vectorizer"]
-    model = result["models"][best_name]
-    proba = model.predict_proba(featurize(make_text(df), vec, dense_extra=ctx_df))[:, 1]
+    # 2. FINAL TRAIN on all dev, purged vs the untouched test period.
+    t0d = pd.to_datetime(df["t0"]).dt.date.to_numpy()
+    dev_pos = np.flatnonzero(
+        np.array([d <= periods.DEV_END for d in t0d], dtype=bool)
+    )
+    dev = df.iloc[dev_pos]
+    keep = vsplits.purge_against(
+        dev["t0"], dev["t1"], periods.TEST_START, periods.TEST_END
+    )
+    n_purged_final = int((~keep).sum())
+    log(
+        f"[m3] final train: {int(keep.sum())} dev rows "
+        f"(purged {n_purged_final} vs test {periods.TEST_START}..{periods.TEST_END})"
+    )
+    final = _prepare_fit_frame(
+        df, dev_pos[keep.to_numpy()], None, label_cfg, train_label_col, log,
+        "final-train",
+    )
+    vec = TfidfVectorizer(
+        max_features=5000, ngram_range=(1, 2), stop_words="english", sublinear_tf=True
+    )
+    vec.fit(texts.iloc[final["tri_eff"]])
+    Xtr = featurize(
+        texts.iloc[final["tri_eff"]], vec,
+        dense_extra=_take_rows(ctx_df, final["tri_eff"]),
+    )
+    fitted_final = fit_challenger_candidates(
+        Xtr, final["ytr"], sample_weight=final["sample_weight"]
+    )
+    if best_name not in fitted_final:
+        raise RuntimeError(
+            f"[m3] selection winner {best_name!r} failed to fit on the final "
+            "train block; refusing to persist a different model silently"
+        )
+    model = fitted_final[best_name]
+    joblib.dump(vec, ART / "vectorizer.pkl")
+    joblib.dump(model, ART / "model.pkl")
+    (ART / "best_model.txt").write_text(best_name)
+    log(f"[m3] saved best model: {best_name} (selected on purged validation)")
+
+    label_block = {
+        "scheme": label_cfg.scheme,
+        "window_days": label_cfg.window_days,
+        "quantile": float(label_cfg.quantile),
+        "benchmark": label_cfg.benchmark,
+        "attention": {
+            "enabled": bool(label_cfg.attention_enabled),
+            "min_articles": label_cfg.attention_min_articles,
+            "top_quartile": label_cfg.attention_top_quartile,
+            "quantiles_from": "train only, per fold/block (0.6.0; was global)",
+        },
+        "cutoff": round(final["cutoff"], 6),
+        "cutoff_source": "final-train abn_ret only (0.6.0; was global full-sample)",
+        "positive_rate": round(float(final["ytr"].mean()), 4),
+        "n_final_train": len(final["tri_eff"]),
+        "n_purged_vs_test": n_purged_final,
+        "t0_anchor": "first tradable time after publication (0.6.0; was pub calendar date)",
+        "periods": periods.describe(),
+    }
+
+    # 3. OUT-OF-SAMPLE scores via purged walk-forward on dev (audit 4f).
+    from signal_lab.models.walk_forward import run_walk_forward
+
+    wf = run_walk_forward(
+        df,
+        dense_extra=ctx_df,
+        n_splits=5,
+        trading_days=trading_days,
+        label_cfg=label_cfg,
+        model_name=best_name,
+        dedupe_policy="weight",
+        log=log,
+        train_label_col=train_label_col,
+        train_label_source=train_labels,
+        return_oos=True,
+    )
+    oos = wf.get("oos_proba", {})
     scored_df = df[["url", "text", "ticker", "published_at", "pub_date"]].copy()
-    scored_df["proba"] = proba
+    scored_df["proba"] = np.nan
+    if oos:
+        idx = np.array(sorted(oos), dtype=int)
+        # oos positions are into run_walk_forward's reset work frame, which
+        # matches df's order (build_dataset output has no NaN t0/t1/abn_ret).
+        assert idx.max() < len(scored_df), "[m3] OOS position out of range"
+        scored_df["proba"].iloc[idx] = [oos[i] for i in idx]
     scored_df.to_csv(ART / "scored_news.csv", index=False)
-    log(f"[m3] scored {len(scored_df)} articles -> {ART / 'scored_news.csv'}")
-    result["best_model"] = best_name
-    result["label_config"] = label_block
-    result["train_labels"] = train_labels_block
+    log(
+        f"[m3] scored {len(scored_df)} articles -> {ART / 'scored_news.csv'} "
+        f"({len(oos)} with OOS proba; NaN = never in a fold-test block)"
+    )
+
+    result = {
+        "reports": reports,
+        "models": {best_name: model},
+        "vectorizer": vec,
+        "positive_rate": round(float(final["ytr"].mean()), 4),
+        "n_train": len(final["tri_eff"]),
+        "n_test": len(oos),
+        "best_model": best_name,
+        "selection": {
+            "valid_start": sp["valid_start"],
+            "valid_end": sp["valid_end"],
+            "validation_pr_auc": {n: round(v, 4) for n, v in va_pr.items()},
+        },
+        "walk_forward": wf,
+        "label_config": label_block,
+        "train_labels": train_labels_block,
+    }
     # 0.3.0 WS2: FinBERT ablation (opt-in; falls back cleanly offline).
     result["finbert_ablation"] = maybe_run_finbert_ablation(
         df, log=log, tfidf_result=result, requested=finbert
@@ -271,7 +572,7 @@ def run_pipeline(
         model,
         feature_names(vec, CONTEXT_FEATURE_NAMES),
         list(LEXICON_FEATURE_NAMES) + list(CONTEXT_FEATURE_NAMES),
-        featurize(make_text(df), vec, dense_extra=ctx_df),
+        featurize(texts, vec, dense_extra=ctx_df),
     )
     return result
 
