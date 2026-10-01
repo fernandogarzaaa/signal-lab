@@ -46,8 +46,12 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 GOLD_VERSION = 1
 INSTRUCTIONS = (
     "For each item, read the headline and snippet and answer: does this read "
-    "POSITIVE (1) or NEGATIVE (0) for the company named in 'ticker'? Set "
-    "human_label to 1 or 0. Leave it null to skip an item you cannot judge. "
+    "POSITIVE (1), NEGATIVE (0), or NEUTRAL (2) for the company named in 'ticker'? "
+    "Use 2 when the article has no clear directional sentiment for the company "
+    "(routine announcements, mixed signals, or irrelevant content). "
+    "After the label, rate your confidence: h=high, m=medium, l=low. "
+    "Set human_label to 1, 0, or 2 with confidence, e.g. '1 h' or '2 m'. "
+    "'s' skips temporarily (item returns later); 'x' skips permanently. "
     "'human_note' is optional free text explaining a judgment call."
 )
 
@@ -108,15 +112,21 @@ def agreement_report(items: list[dict]) -> dict:
     """Agreement between weak labels and human labels.
 
     Each item needs 'weak_label' and 'human_label'. Items whose human_label
-    is not 0/1 (null = skipped) are excluded. The human label is treated as
+    is not 0/1 (null = skipped, 2 = neutral, 'x' = permanently skipped)
+    are excluded from binary agreement. The human label is treated as
     ground truth: tp/tn/fp/fn describe the weak label against it.
+    Neutral rate is reported separately.
     """
     judged = [it for it in items if it.get("human_label") in (0, 1)]
     n = len(judged)
+    n_neutral = sum(1 for it in items if it.get("human_label") == 2)
+    n_skipped = sum(1 for it in items if it.get("human_label") in (None, "x"))
     if n == 0:
         return {
             "n_items": len(items),
             "n_judged": 0,
+            "n_neutral": n_neutral,
+            "n_skipped": n_skipped,
             "agreement": None,
             "tp": 0,
             "tn": 0,
@@ -135,6 +145,8 @@ def agreement_report(items: list[dict]) -> dict:
     return {
         "n_items": len(items),
         "n_judged": n,
+        "n_neutral": n_neutral,
+        "n_skipped": n_skipped,
         "agreement": round((tp + tn) / n, 4),
         "tp": tp,
         "tn": tn,
@@ -189,6 +201,7 @@ def cmd_sample(args, log=print) -> Path:
                 "ticker": row["ticker"],
                 "weak_label": int(row["label"]),
                 "human_label": None,
+                "human_confidence": None,
                 "human_note": "",
             }
         )
@@ -250,8 +263,9 @@ def cmd_label(args, log=print) -> dict:
 
     Walks through every item with human_label=None, showing title/snippet/
     ticker/date but NEVER the weak label. Saves after every judgment so
-    quitting or crashing loses nothing. Accepts '1 [note]' / '0 [note]' so
-    an optional note can ride along with the label.
+    quitting or crashing loses nothing. Accepts '1 h [note]' / '0 m [note]' /
+    '2 l [note]' so label + confidence + optional note ride along.
+    's' skips temporarily (returns later), 'x' skips permanently.
     """
     path = Path(args.in_path)
     payload = json.loads(path.read_text())
@@ -264,8 +278,10 @@ def cmd_label(args, log=print) -> dict:
     todo = [it for it in items if it.get("human_label") is None]
     done = len(items) - len(todo)
     log(f"[gold] {done}/{len(items)} already labeled; {len(todo)} remaining.")
-    log("[gold] keys: 1=positive  0=negative  s=skip  q=save+quit")
-    log("[gold] append a note after the digit, e.g. '1 earnings beat'.")
+    log("[gold] keys: 1=positive  0=negative  2=neutral")
+    log("[gold] confidence: h=high  m=medium  l=low")
+    log("[gold] s=skip (returns later)  x=skip permanently  q=save+quit")
+    log("[gold] format: '<label> <confidence> [note]', e.g. '1 h earnings beat'.")
     labeled = 0
     try:
         for idx, it in enumerate(todo):
@@ -277,16 +293,21 @@ def cmd_label(args, log=print) -> dict:
             log(f"TEXT: {snippet}")
             while True:
                 try:
-                    raw = input("[1/0/s/q] ").strip()
+                    raw = input("[1/0/2 + h/m/l, s, x, q] ").strip()
                 except EOFError:
                     raw = "q"
                 if not raw:
                     continue
-                parts = raw.split(None, 1)
+                parts = raw.split(None, 2)
                 key = parts[0].lower()
-                note = parts[1] if len(parts) > 1 else ""
-                if key in ("1", "0"):
+                if key in ("1", "0", "2"):
+                    conf = parts[1].lower() if len(parts) > 1 else ""
+                    note = parts[2] if len(parts) > 2 else ""
+                    if conf not in ("h", "m", "l"):
+                        log("  add confidence: h, m, or l (e.g. '1 h')")
+                        continue
                     it["human_label"] = int(key)
+                    it["human_confidence"] = conf
                     if note:
                         it["human_note"] = note
                     labeled += 1
@@ -294,9 +315,13 @@ def cmd_label(args, log=print) -> dict:
                     break
                 if key == "s":
                     break
+                if key == "x":
+                    it["human_label"] = "x"
+                    path.write_text(json.dumps(sanitize_json(payload), indent=2))
+                    break
                 if key == "q":
                     raise KeyboardInterrupt
-                log("  use 1, 0, s, or q")
+                log("  use 1, 0, 2 (+ h/m/l), s, x, or q")
     except KeyboardInterrupt:
         log("")
     path.write_text(json.dumps(sanitize_json(payload), indent=2))
