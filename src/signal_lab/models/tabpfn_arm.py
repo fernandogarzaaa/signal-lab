@@ -110,8 +110,13 @@ def pca_features(
     """PCA fit on TRAIN only, applied to test. Returns (Z_train, Z_test, pca).
 
     Constant train columns are dropped first: they carry no signal and
-    make TabPFN's internal encoder divide by zero (NaN). This is a
-    no-information filter, not scaling, so the zero-tuning spirit holds.
+    make TabPFN's internal encoder divide by zero (NaN). Degenerate PCA
+    *output* components (near-zero train variance from rank-deficient
+    input) are dropped too: they carry no signal, underflow to 0 in
+    float32, and produce environment-dependent NaNs inside TabPFN's
+    encoder on some CPU SIMD paths (observed as flaky CI failures).
+    Both filters are no-information filters, not scaling, so the
+    zero-tuning spirit holds.
     """
     Xtr = np.asarray(X_train, dtype=float)
     Xte = np.asarray(X_test, dtype=float)
@@ -128,6 +133,15 @@ def pca_features(
     pca = PCA(n_components=n_comp, random_state=random_state)
     Ztr = pca.fit_transform(Xtr)
     Zte = pca.transform(Xte)
+    out_keep = Ztr.std(axis=0) > 1e-12
+    n_out_dropped = int((~out_keep).sum())
+    if n_out_dropped:
+        if int(out_keep.sum()) < 1:
+            raise ValueError(
+                "[tabpfn] PCA produced only degenerate components; "
+                "refusing to condition"
+            )
+        Ztr, Zte = Ztr[:, out_keep], Zte[:, out_keep]
     if not (np.all(np.isfinite(Ztr)) and np.all(np.isfinite(Zte))):
         raise ValueError(
             "[tabpfn] non-finite values in PCA output; refusing to condition"
