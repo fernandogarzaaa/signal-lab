@@ -24,3 +24,8 @@ lightgbm>=4.0
 # transformers, but a local env that ALSO needs transformers (the FinBERT
 # path) should install tabpfn with --no-deps after upgrading the hub.
 tabpfn==2.0.6
+# gdelt-client (item 5): maintained GDELT DOC API client replacing our
+# hand-rolled requests loop in signal_lab.ingest.fetch_news. Pinned to
+# 0.2.2 (Filters/article_search API as coded against). Code-health
+# migration only: it does not change GDELT's rate limits.
+gdelt-client==0.2.2

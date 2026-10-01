@@ -2,11 +2,6 @@
 
 from __future__ import annotations
 
-import re
-import sys
-import time
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import duckdb
@@ -18,8 +13,6 @@ from bs4 import BeautifulSoup
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = REPO_ROOT / "data"
 DB_PATH = str(DATA_DIR / "signal_lab.duckdb")
-
-GDELT_DOC_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
 
 NEWS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS news_raw (
@@ -76,14 +69,6 @@ def _upsert(con: duckdb.DuckDBPyConnection, table: str, df: pd.DataFrame, keys: 
     return after - before
 
 
-def _parse_gdelt_dt(s: str) -> datetime | None:
-    # GDELT seendate looks like "20260930T120000Z"
-    try:
-        return datetime.strptime(s, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
-    except (ValueError, TypeError):
-        return None
-
-
 def _fetch_snippet(url: str, timeout: float = 8.0) -> str:
     """Best-effort article body snippet. Never raises; returns '' on failure."""
     try:
@@ -108,65 +93,21 @@ def fetch_news(query: str, start: str, end: str, max_records: int = 250,
     """Pull news via the GDELT 2.1 DOC API.
 
     start/end: 'YYYY-MM-DD'. Returns list of dicts with url, title,
-    body_snippet, published_at, source_domain. Retries with exponential
-    backoff on 429 rate limits (GDELT throttles aggressively).
+    body_snippet, published_at, source_domain. Implemented through the
+    maintained ``gdelt-client`` package (see
+    ``signal_lab.ingest.gdelt_client``); 429s are retried with
+    exponential backoff inside the client, and a ``RateLimitError`` is
+    raised when retries are exhausted so callers can log an explicit
+    fetch gap.
+
+    Code-health migration only: this does not change GDELT's rate
+    limits. Politeness sleeps between queries live in the callers.
     """
-    start_dt = datetime.strptime(start, "%Y-%m-%d")
-    end_dt = datetime.strptime(end, "%Y-%m-%d") + timedelta(days=1) - timedelta(seconds=1)
-    params = {
-        "query": query,
-        "mode": "artlist",
-        "maxrecords": max_records,
-        "format": "json",
-        "sort": "datedesc",
-        "startdatetime": start_dt.strftime("%Y%m%d%H%M%S"),
-        "enddatetime": end_dt.strftime("%Y%m%d%H%M%S"),
-    }
-    last_exc: Exception | None = None
-    for attempt in range(retries):
-        try:
-            r = requests.get(GDELT_DOC_URL, params=params, timeout=30)
-            r.raise_for_status()
-            break
-        except requests.HTTPError as exc:
-            last_exc = exc
-            status = exc.response.status_code if exc.response is not None else 0
-            if status == 429 and attempt < retries - 1:
-                wait = 15 * (2 ** attempt)
-                print(f"[gdelt] 429 rate limited, waiting {wait}s (attempt {attempt + 1})",
-                      file=sys.stderr)
-                time.sleep(wait)
-                continue
-            raise
-    else:
-        raise last_exc  # pragma: no cover - loop always breaks or raises
-    payload = r.json()
-    articles = payload.get("articles", []) or []
-    now = datetime.now(timezone.utc)
-    metas = []
-    for a in articles:
-        url = a.get("url") or ""
-        if not url:
-            continue
-        metas.append(
-            {
-                "url": url,
-                "title": a.get("title") or "",
-                "published_at": _parse_gdelt_dt(a.get("seendate", "")),
-                "source_domain": a.get("domain") or "",
-                "query": query,
-                "fetched_at": now,
-            }
-        )
-    if fetch_bodies and metas:
-        with ThreadPoolExecutor(max_workers=10) as ex:
-            snippets = list(ex.map(_fetch_snippet, [m["url"] for m in metas]))
-        for m, s in zip(metas, snippets):
-            m["body_snippet"] = s
-    else:
-        for m in metas:
-            m["body_snippet"] = ""
-    return metas
+    from signal_lab.ingest.gdelt_client import fetch_news_via_client
+    return fetch_news_via_client(
+        query, start, end,
+        max_records=max_records, fetch_bodies=fetch_bodies, retries=retries,
+    )
 
 
 def fetch_prices(tickers: list[str], start: str, end: str) -> pd.DataFrame:
