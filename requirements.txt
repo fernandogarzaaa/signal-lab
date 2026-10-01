@@ -16,3 +16,9 @@ spacy>=3.7
 # reported as skipped and the logistic-regression models still train.
 lightgbm>=4.0
 # M6 uses TF-IDF retrieval (no sentence-transformers needed).
+# TabPFN zero-tuning benchmark arm. Pinned to 2.0.6: the last release that
+# runs fully locally with no account (tabpfn>=2.5 needs a PriorLabs account
+# token). 2.0.6's huggingface-hub<1 pin is stale (verified working on
+# hub>=1.31 at runtime); if you also need transformers (FinBERT path),
+# install tabpfn with --no-deps after upgrading the hub.
+tabpfn==2.0.6
