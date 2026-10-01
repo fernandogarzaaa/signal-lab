@@ -16,6 +16,8 @@ The single home for everything about *when* data may be used:
 - ``dedupe``: same-ticker same-t0 dedupe / down-weighting.
 - ``point_in_time``: per-feature observation/publication/availability
   declarations.
+- ``targets``: the versioned forward-return target set (Phase 2),
+  t0-anchored, with the v2 set subsuming the Phase 1 label input.
 
 Rule of the module: no function here may look at data dated after the
 prediction time it serves. The splitter asserts its own invariants on
@@ -23,6 +25,14 @@ every call (no train/test index overlap, no [t0, t1] overlap with any
 test range, embargo respected); these are runtime assertions, not tests.
 """
 
-from signal_lab.validation import dedupe, labels, periods, point_in_time, splits, timing
+from signal_lab.validation import (
+    dedupe,
+    labels,
+    periods,
+    point_in_time,
+    splits,
+    targets,
+    timing,
+)
 
-__all__ = ["dedupe", "labels", "periods", "point_in_time", "splits", "timing"]
+__all__ = ["dedupe", "labels", "periods", "point_in_time", "splits", "targets", "timing"]

@@ -318,6 +318,11 @@ def apply_legacy_labeling(
     """
     config = config.validated()
     attention_info = None
+    # build_labels attaches an n_articles column, but the legacy path
+    # recomputes the attention filter on the full frame (0.3.0-0.5.1
+    # semantics). Drop the incoming one so apply_attention's merge does
+    # not suffix-collide into n_articles_x/_y.
+    df = df.drop(columns=["n_articles"], errors="ignore")
     if config.attention_enabled:
         df, attention_info = apply_attention(
             df,

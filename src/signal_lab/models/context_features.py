@@ -350,3 +350,398 @@ def build_context_features(
             asof_dates[m] = cal_dates[pos[m]]
     result["ctx_asof"] = asof_dates
     return pd.concat([result, out], axis=1)
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: trailing price/volume features (research feature set).
+#
+# Fourteen dense features, every one knowable at prediction time. All price
+# inputs come from trading days on or before the as-of day D (the latest
+# trading day strictly BEFORE the article's publish date -- the same rule
+# as the ctx_* features, via the shared _asof_positions helper), so no
+# future information can leak into the model. Insufficient history yields
+# NaN, never filled, never forward-filled.
+#
+# - ``px_ret_1d``: trailing 1-day return, close[D]/close[D-1] - 1.
+#   (ctx_mom5/ctx_mom20 already cover the 5d/20d trailing returns, so the
+#   1d return is the non-duplicating addition.)
+# - ``px_rsi_14``: Wilder's RSI(14), 0-100. Seeded with the simple mean of
+#   the first 14 gains/losses, then Wilder smoothing
+#   avg_t = (avg_{t-1}*13 + x_t)/14. First value at the 15th close.
+# - ``px_macd_hist``: MACD(12,26,9) histogram = MACD line - signal line,
+#   with the recursive EMA (ema[0] = x[0]). NaN until 35 closes are
+#   available (26 for the slow EMA to converge + 9 for the signal line).
+# - ``px_ma_dist_20`` / ``px_ma_dist_50``: (close[D] - SMA_n[D]) / SMA_n[D].
+# - ``px_realvol_5d`` / ``px_realvol_20d``: sample std (ddof=1) of daily
+#   LOG returns over the trailing 5/20 trading days ending on D, in daily
+#   units (not annualized).
+# - ``px_atr_14``: Wilder's ATR(14) divided by close[D] (fraction of price).
+#   True range = max(high-low, |high-prev_close|, |low-prev_close|),
+#   seeded with the mean of the first 14 true ranges.
+# - ``px_vol_z_20``: (volume[D] - mean(volume[D-19..D])) / std(...),
+#   ddof=1; exactly 0.0 when the trailing volume is constant.
+# - ``px_relvol_20``: volume[D] / median(volume[D-19..D]).
+# - ``px_vs_spy_5d`` / ``px_vs_spy_20d``: ticker trailing return minus the
+#   SPY trailing return over the same window ending on D.
+# - ``mkt_spy_ret_20d``: SPY trailing 20d return ending on D.
+# - ``mkt_spy_vol_20d``: sample std (ddof=1) of SPY daily log returns over
+#   the trailing 20 trading days ending on D, daily units.
+#
+# VIX: deliberately skipped. There is no local VIX series in the DuckDB
+# backfill, and adding one would put a network dependency in the research
+# path. mkt_spy_ret_20d / mkt_spy_vol_20d cover the market-regime role the
+# VIX leg would play.
+# ---------------------------------------------------------------------------
+
+PRICE_FEATURE_NAMES = [
+    "px_ret_1d",
+    "px_rsi_14",
+    "px_macd_hist",
+    "px_ma_dist_20",
+    "px_ma_dist_50",
+    "px_realvol_5d",
+    "px_realvol_20d",
+    "px_atr_14",
+    "px_vol_z_20",
+    "px_relvol_20",
+    "px_vs_spy_5d",
+    "px_vs_spy_20d",
+    "mkt_spy_ret_20d",
+    "mkt_spy_vol_20d",
+]
+
+# Warmup conventions, in trading days. A feature is NaN until its full
+# warmup is available; warmups are never filled or forward-filled.
+RSI_N = 14  # Wilder RSI: 14 price changes to seed
+MACD_FAST, MACD_SLOW, MACD_SIGNAL = 12, 26, 9
+MACD_MIN_BARS = 35  # 26 closes for the slow EMA to converge + 9 for signal
+ATR_N = 14  # Wilder ATR: 14 true ranges to seed
+
+
+def _ema(values: np.ndarray, span: int) -> np.ndarray:
+    """Recursive EMA (the adjust=False convention).
+
+    ema[0] = x[0]; ema[t] = alpha*x[t] + (1-alpha)*ema[t-1] with
+    alpha = 2/(span+1). Defined from the first bar, so callers impose
+    their own warmup cutoff (see MACD_MIN_BARS).
+    """
+    values = np.asarray(values, dtype=float)
+    out = np.empty(len(values), dtype=float)
+    if len(values) == 0:
+        return out
+    alpha = 2.0 / (span + 1)
+    out[0] = values[0]
+    for t in range(1, len(values)):
+        out[t] = alpha * values[t] + (1.0 - alpha) * out[t - 1]
+    return out
+
+
+def _rsi_from_avgs(avg_gain: float, avg_loss: float) -> float:
+    if avg_loss == 0.0:
+        return 100.0 if avg_gain > 0.0 else 50.0
+    return 100.0 - 100.0 / (1.0 + avg_gain / avg_loss)
+
+
+def _wilder_rsi(close: np.ndarray, n: int = RSI_N) -> np.ndarray:
+    """Wilder's RSI: seed with the simple mean of the first n gains/losses,
+    then Wilder smoothing avg_t = (avg_{t-1}*(n-1) + x_t)/n.
+
+    The first value sits at bar n (it consumes n price changes); earlier
+    bars are NaN.
+    """
+    close = np.asarray(close, dtype=float)
+    out = np.full(len(close), np.nan)
+    if len(close) <= n:
+        return out
+    delta = np.diff(close)
+    gain = np.where(delta > 0.0, delta, 0.0)
+    loss = np.where(delta < 0.0, -delta, 0.0)
+    ag = float(gain[:n].mean())
+    al = float(loss[:n].mean())
+    out[n] = _rsi_from_avgs(ag, al)
+    for i in range(n + 1, len(close)):
+        ag = (ag * (n - 1) + gain[i - 1]) / n
+        al = (al * (n - 1) + loss[i - 1]) / n
+        out[i] = _rsi_from_avgs(ag, al)
+    return out
+
+
+def _wilder_atr(
+    high: np.ndarray, low: np.ndarray, close: np.ndarray, n: int = ATR_N
+) -> np.ndarray:
+    """Wilder's ATR: true range seeded with the mean of the first n true
+    ranges, then Wilder smoothing. First value at bar n-1; earlier NaN."""
+    high = np.asarray(high, dtype=float)
+    low = np.asarray(low, dtype=float)
+    close = np.asarray(close, dtype=float)
+    out = np.full(len(close), np.nan)
+    if len(close) < n:
+        return out
+    tr = np.empty(len(close), dtype=float)
+    tr[0] = high[0] - low[0]
+    for j in range(1, len(close)):
+        tr[j] = max(
+            high[j] - low[j],
+            abs(high[j] - close[j - 1]),
+            abs(low[j] - close[j - 1]),
+        )
+    atr = float(tr[:n].mean())
+    out[n - 1] = atr
+    for i in range(n, len(close)):
+        atr = (atr * (n - 1) + tr[i]) / n
+        out[i] = atr
+    return out
+
+
+def _macd_hist(
+    close: np.ndarray,
+    fast: int = MACD_FAST,
+    slow: int = MACD_SLOW,
+    signal: int = MACD_SIGNAL,
+    min_bars: int = MACD_MIN_BARS,
+) -> np.ndarray:
+    """MACD(fast, slow, signal) histogram = MACD line - signal line.
+
+    NaN until ``min_bars`` closes are available (the recursive EMA is
+    defined from the first bar, so the cutoff keeps early, unconverged
+    values out of the feature set).
+    """
+    close = np.asarray(close, dtype=float)
+    out = np.full(len(close), np.nan)
+    if len(close) < min_bars:
+        return out
+    macd_line = _ema(close, fast) - _ema(close, slow)
+    sig = _ema(macd_line, signal)
+    out[min_bars - 1 :] = macd_line[min_bars - 1 :] - sig[min_bars - 1 :]
+    return out
+
+
+def _pct_k(close: np.ndarray, k: int) -> np.ndarray:
+    """Trailing k-day simple return: close[i]/close[i-k] - 1."""
+    close = np.asarray(close, dtype=float)
+    out = np.full(len(close), np.nan)
+    if len(close) <= k:
+        return out
+    denom = close[:-k]
+    ok = denom > 0
+    vals = np.full(len(close) - k, np.nan)
+    vals[ok] = close[k:][ok] / denom[ok] - 1.0
+    out[k:] = vals
+    return out
+
+
+def _ma_dist(close: np.ndarray, n: int) -> np.ndarray:
+    """(close - SMA_n) / SMA_n, NaN until n closes are available."""
+    s = pd.Series(np.asarray(close, dtype=float))
+    sma = s.rolling(n, min_periods=n).mean()
+    dist = (s - sma) / sma
+    return dist.where(sma > 0).to_numpy()
+
+
+def _trailing_realvol(close: np.ndarray, n: int) -> np.ndarray:
+    """Sample std (ddof=1) of daily log returns over the trailing n trading
+    days, in daily units. NaN until n valid log returns exist."""
+    c = np.asarray(close, dtype=float)
+    lret = np.full(len(c), np.nan)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        lr_all = np.log(c[1:] / c[:-1])
+    lr_all[~np.isfinite(lr_all)] = np.nan
+    lr_all[~((c[1:] > 0) & (c[:-1] > 0))] = np.nan
+    lret[1:] = lr_all
+    return pd.Series(lret).rolling(n, min_periods=n).std(ddof=1).to_numpy()
+
+
+def _vol_z(volume: np.ndarray, n: int) -> np.ndarray:
+    """Volume z-score vs the trailing n trading days (inclusive of D).
+
+    (v[D] - mean) / std, ddof=1. Exactly 0.0 when the trailing volume is
+    constant (no deviation); NaN until n observations exist.
+    """
+    s = pd.Series(np.asarray(volume, dtype=float))
+    mu = s.rolling(n, min_periods=n).mean()
+    sd = s.rolling(n, min_periods=n).std(ddof=1)
+    z = (s - mu) / sd
+    return z.where(sd != 0.0, 0.0).to_numpy()
+
+
+def _relvol(volume: np.ndarray, n: int) -> np.ndarray:
+    """volume[D] / median(volume[D-n+1..D]); NaN until n observations."""
+    s = pd.Series(np.asarray(volume, dtype=float))
+    med = s.rolling(n, min_periods=n).median()
+    rel = s / med
+    return rel.where(med > 0).to_numpy()
+
+
+def _ticker_price_indicators(g: pd.DataFrame) -> pd.DataFrame:
+    """All trailing indicators for one ticker's bar panel (date-sorted)."""
+    g = g.sort_values("date").reset_index(drop=True)
+    c = g["close"].to_numpy(dtype=float)
+    h = g["high"].to_numpy(dtype=float)
+    low = g["low"].to_numpy(dtype=float)
+    v = g["volume"].to_numpy(dtype=float)
+    atr = _wilder_atr(h, low, c)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        atr_ratio = atr / c
+    atr_ratio[~np.isfinite(atr_ratio)] = np.nan
+    return pd.DataFrame(
+        {
+            "ticker": g["ticker"].to_numpy(),
+            "date": g["date"].to_numpy(),
+            "ret_1d": _pct_k(c, 1),
+            "ret_5d": _pct_k(c, 5),
+            "ret_20d": _pct_k(c, 20),
+            "rsi_14": _wilder_rsi(c),
+            "macd_hist": _macd_hist(c),
+            "ma_dist_20": _ma_dist(c, 20),
+            "ma_dist_50": _ma_dist(c, 50),
+            "realvol_5d": _trailing_realvol(c, 5),
+            "realvol_20d": _trailing_realvol(c, 20),
+            "atr_14": atr_ratio,
+            "vol_z_20": _vol_z(v, 20),
+            "relvol_20": _relvol(v, 20),
+        }
+    )
+
+
+def _trailing_price_indicators(prices: pd.DataFrame) -> pd.DataFrame:
+    """Per (ticker, trading date): trailing price/volume indicators.
+
+    Every value at row date D uses only bars with date <= D (never later).
+    Insufficient history -> NaN, never filled.
+    """
+    required = {"ticker", "date", "open", "high", "low", "close", "volume"}
+    missing = required - set(prices.columns)
+    if missing:
+        raise ValueError(f"[price-features] prices missing columns {missing}")
+    p = prices.copy()
+    p["date"] = pd.to_datetime(p["date"]).dt.date
+    p = p.sort_values(["ticker", "date"]).drop_duplicates(["ticker", "date"])
+    frames = [_ticker_price_indicators(g) for _, g in p.groupby("ticker")]
+    return pd.concat(frames, ignore_index=True)
+
+
+def build_price_features(
+    news: pd.DataFrame,
+    prices: pd.DataFrame,
+    benchmark: str = "SPY",
+    log=print,
+) -> pd.DataFrame:
+    """Compute the 14 trailing price/volume features for each news row.
+
+    ``news`` needs columns: url, ticker, published_at (pub_date is derived
+    when absent). ``prices`` needs columns: ticker, date, open, high, low,
+    close, volume.
+
+    Returns a DataFrame with columns ``["url", "ctx_asof"] +
+    PRICE_FEATURE_NAMES``, in the input row order and on the input index.
+    ``ctx_asof`` is the latest trading day strictly before the publish
+    date (the point-in-time anchor; None where none exists). Every feature
+    uses bars on or before ``ctx_asof`` only; insufficient history is NaN
+    (never filled, never forward-filled) and the caller decides how to
+    handle it.
+
+    The SPY-relative features (``px_vs_spy_5d``, ``px_vs_spy_20d``,
+    ``mkt_spy_ret_20d``, ``mkt_spy_vol_20d``) use the latest benchmark
+    trading day on or before the as-of day; when the benchmark is absent
+    from ``prices`` they stay NaN (logged, not raised).
+    """
+    news = news.copy()
+    missing_news = {"url", "ticker", "published_at"} - set(news.columns)
+    if missing_news:
+        raise ValueError(f"[price-features] news missing columns {missing_news}")
+    if "pub_date" not in news.columns:
+        news["pub_date"] = pd.to_datetime(news["published_at"], utc=True).dt.date
+
+    ind = _trailing_price_indicators(prices)
+    calendars = {
+        t: np.array([_ordinal(d) for d in sub["date"]])
+        for t, sub in ind.groupby("ticker")
+    }
+    tickers = news["ticker"].to_numpy()
+    pos = _asof_positions(calendars, tickers, news["pub_date"].to_numpy())
+
+    out = pd.DataFrame(np.nan, index=news.index, columns=PRICE_FEATURE_NAMES)
+    ok = pos >= 0
+    by_ticker = {
+        t: sub.sort_values("date").reset_index(drop=True)
+        for t, sub in ind.groupby("ticker")
+    }
+    # Intermediate trailing returns, needed for the benchmark-relative
+    # features below (not part of PRICE_FEATURE_NAMES: ctx_mom5/ctx_mom20
+    # already cover the 5d/20d legs, see px_ret_1d note above).
+    t_ret5 = np.full(len(news), np.nan)
+    t_ret20 = np.full(len(news), np.nan)
+    _PX_COLS = [
+        "px_ret_1d",
+        "px_rsi_14",
+        "px_macd_hist",
+        "px_ma_dist_20",
+        "px_ma_dist_50",
+        "px_realvol_5d",
+        "px_realvol_20d",
+        "px_atr_14",
+        "px_vol_z_20",
+        "px_relvol_20",
+    ]
+    _IND_COLS = [
+        "ret_1d",
+        "rsi_14",
+        "macd_hist",
+        "ma_dist_20",
+        "ma_dist_50",
+        "realvol_5d",
+        "realvol_20d",
+        "atr_14",
+        "vol_z_20",
+        "relvol_20",
+    ]
+    if ok.any():
+        for ticker, sub in by_ticker.items():
+            m = ok & (tickers == ticker)
+            if not m.any():
+                continue
+            rows = sub.iloc[pos[m]]
+            out.loc[m, _PX_COLS] = rows[_IND_COLS].to_numpy()
+            t_ret5[m] = rows["ret_5d"].to_numpy()
+            t_ret20[m] = rows["ret_20d"].to_numpy()
+
+    # Benchmark leg: latest benchmark trading day on or before the as-of
+    # day (same searchsorted pattern as ctx_sector_rel5).
+    asof_ord = np.full(len(news), -1, dtype=int)
+    for ticker, cal in calendars.items():
+        m = ok & (tickers == ticker)
+        asof_ord[m] = cal[pos[m]]
+    if benchmark in by_ticker:
+        spy = by_ticker[benchmark]
+        spy_cal = np.array([_ordinal(d) for d in spy["date"]])
+        s5 = spy["ret_5d"].to_numpy()
+        s20 = spy["ret_20d"].to_numpy()
+        sv = spy["realvol_20d"].to_numpy()
+        idx_ok = np.flatnonzero(ok)
+        sp = np.searchsorted(spy_cal, asof_ord[idx_ok], side="right") - 1
+        good = sp >= 0
+        ii = idx_ok[good]
+        out.iloc[ii, out.columns.get_loc("px_vs_spy_5d")] = t_ret5[ii] - s5[sp[good]]
+        out.iloc[ii, out.columns.get_loc("px_vs_spy_20d")] = t_ret20[ii] - s20[sp[good]]
+        out.iloc[ii, out.columns.get_loc("mkt_spy_ret_20d")] = s20[sp[good]]
+        out.iloc[ii, out.columns.get_loc("mkt_spy_vol_20d")] = sv[sp[good]]
+    else:
+        log(
+            f"[px] benchmark {benchmark!r} not in prices: px_vs_spy_5d, "
+            "px_vs_spy_20d, mkt_spy_ret_20d, mkt_spy_vol_20d left NaN"
+        )
+
+    result = pd.DataFrame({"url": news["url"].to_numpy()}, index=news.index)
+    # ctx_asof: the point-in-time anchor, the latest trading day strictly
+    # before the publish date (None where no prior trading day exists).
+    # Used by validation.point_in_time to prove features predate publication.
+    asof_dates = np.full(len(news), None, dtype=object)
+    for ticker, cal in calendars.items():
+        m = (tickers == ticker) & (pos >= 0)
+        if m.any():
+            cal_dates = np.array(
+                [pd.Timestamp.fromordinal(int(o)).date() for o in cal]
+            )
+            asof_dates[m] = cal_dates[pos[m]]
+    result["ctx_asof"] = asof_dates
+    return pd.concat([result, out], axis=1)
