@@ -49,6 +49,11 @@ def run_study(log=print) -> tuple[pd.DataFrame, pd.DataFrame]:
         verdict = "REJECT H0" if r["p_value"] < 0.05 else "fail to reject H0"
         log(f"[m4] window {r['window']}: n={r['n']} mean CAR={r['mean_car']:+.4f} "
             f"t={r['t_stat']:.2f} p={r['p_value']:.4f} -> {verdict}")
+        log(f"[m4]   standardized (n={r['n_car_events']}): "
+            f"BMP t={r['bmp_stat']:.2f} p={r['bmp_p']:.4f}; "
+            f"adj-BMP t={r['adj_bmp_stat']:.2f} p={r['adj_bmp_p']:.4f} "
+            f"(r_bar={r['adj_bmp_rbar']:.3f}); "
+            f"GRANK t={r['grank_stat']:.2f} p={r['grank_p']:.4f}")
     return events, res
 
 

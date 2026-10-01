@@ -77,8 +77,12 @@ def event_study(events: pd.DataFrame, prices: pd.DataFrame,
                 benchmark: str = "SPY", windows: list[tuple[int, int]] = WINDOWS) -> pd.DataFrame:
     """events: DataFrame[ticker, event_date (datetime.date), sentiment].
     prices: DataFrame[ticker, date (datetime.date), close].
-    Returns one row per window: n, mean_car, t_stat, p_value, ci95_lo, ci95_hi, overlap_rate.
+    Returns one row per window: n, mean_car, t_stat, p_value, ci95_lo, ci95_hi, overlap_rate,
+    plus the standardized cross-sectional tests from car_tests
+    (bmp, adj_bmp with r_bar, grank).
     """
+    from signal_lab.stats import car_tests
+
     rows = []
     for pre, post in windows:
         ec = event_cars(events, prices, benchmark=benchmark, pre=pre, post=post)
@@ -86,11 +90,22 @@ def event_study(events: pd.DataFrame, prices: pd.DataFrame,
         used_windows = list(zip(ec["ticker"], ec["win_lo"], ec["win_hi"])) if not ec.empty else []
         n = len(cars)
         mean = float(cars.mean()) if n else float("nan")
+        # Standardized tests on the same window (needs the AR panel).
+        panel = car_tests.event_ar_panel(events, prices, benchmark=benchmark,
+                                         pre=pre, post=post)
+        xt = car_tests.cross_sectional_tests(panel, pre, post)
+        extra = {
+            "bmp_stat": xt["bmp"]["stat"], "bmp_p": xt["bmp"]["p_value"],
+            "adj_bmp_stat": xt["adj_bmp"]["stat"], "adj_bmp_p": xt["adj_bmp"]["p_value"],
+            "adj_bmp_rbar": xt["r_bar"],
+            "grank_stat": xt["grank"]["stat"], "grank_p": xt["grank"]["p_value"],
+            "n_car_events": xt["n_events"],
+        }
         if n < 2:
             rows.append({"window": f"[-{pre},+{post}]", "n": n,
                          "mean_car": round(mean, 5) if n else float("nan"),
                          "t_stat": np.nan, "p_value": np.nan, "ci95_lo": np.nan,
-                         "ci95_hi": np.nan, "overlap_rate": np.nan})
+                         "ci95_hi": np.nan, "overlap_rate": np.nan, **extra})
             continue
         se = float(cars.std(ddof=1) / np.sqrt(n))
         t_stat = mean / se if se > 0 else 0.0
@@ -109,5 +124,6 @@ def event_study(events: pd.DataFrame, prices: pd.DataFrame,
         rows.append({"window": f"[-{pre},+{post}]", "n": n, "mean_car": round(mean, 5),
                      "t_stat": round(t_stat, 3), "p_value": round(p_value, 4),
                      "ci95_lo": round(ci[0], 5), "ci95_hi": round(ci[1], 5),
-                     "overlap_rate": round(overlap / pairs, 3) if pairs else 0.0})
+                     "overlap_rate": round(overlap / pairs, 3) if pairs else 0.0,
+                     **extra})
     return pd.DataFrame(rows)
