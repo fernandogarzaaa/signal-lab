@@ -192,17 +192,46 @@ def feature_importance_block(model_name, model, names, dense_names, X) -> dict:
 
 
 def run_pipeline(
-    log=print, label_cfg: LabelConfig | None = None, finbert: bool = False
+    log=print,
+    label_cfg: LabelConfig | None = None,
+    finbert: bool = False,
+    train_labels: str = "weak",
+    jev_labels_path: str | None = None,
 ) -> dict:
     """Build dataset, train, persist artifacts. Returns the train() result,
     with a 'label_config' block describing the labeling used and a
     'finbert_ablation' block (0.3.0 workstream 2; opt-in via ``finbert=True``
-    or the SIGNAL_LAB_FINBERT=1 env var, offline-safe)."""
+    or the SIGNAL_LAB_FINBERT=1 env var, offline-safe).
+
+    train_labels selects the training-label source: "weak" (default,
+    price-derived, reproducible), "jev" or "jev-conf06" (Jev-judged,
+    opt-in; needs the Jev label file at jev_labels_path). Test metrics
+    are always computed against weak labels.
+    """
     label_cfg = (label_cfg or LabelConfig()).validated()
     ART.mkdir(parents=True, exist_ok=True)
     df, label_block = build_dataset(log=log, label_cfg=label_cfg)
     ctx_df = df[CONTEXT_FEATURE_NAMES]
-    result = train(df, text_col="text", dense_extra=ctx_df)
+    train_label_col = None
+    train_labels_block: dict = {"source": train_labels}
+    if train_labels != "weak":
+        from signal_lab.models.train_labels import (
+            DEFAULT_JEV_LABELS_PATH,
+            TRAIN_LABEL_COL,
+            apply_train_labels,
+        )
+
+        effective_jev_path = jev_labels_path or DEFAULT_JEV_LABELS_PATH
+        df = apply_train_labels(
+            df, train_labels, jev_path=effective_jev_path, log=log
+        )
+        ctx_df = df[CONTEXT_FEATURE_NAMES]
+        train_label_col = TRAIN_LABEL_COL
+        train_labels_block["jev_labels_path"] = str(effective_jev_path)
+        train_labels_block["test_labels"] = "weak (fixed evaluation target)"
+    result = train(
+        df, text_col="text", dense_extra=ctx_df, train_label_col=train_label_col
+    )
     table = report_table(result)
     log(table.to_string(index=False))
     log(
@@ -230,6 +259,7 @@ def run_pipeline(
     log(f"[m3] scored {len(scored_df)} articles -> {ART / 'scored_news.csv'}")
     result["best_model"] = best_name
     result["label_config"] = label_block
+    result["train_labels"] = train_labels_block
     # 0.3.0 WS2: FinBERT ablation (opt-in; falls back cleanly offline).
     result["finbert_ablation"] = maybe_run_finbert_ablation(
         df, log=log, tfidf_result=result, requested=finbert
