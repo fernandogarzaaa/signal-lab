@@ -25,16 +25,38 @@ def test_finbert_ctx_matrix_shapes(monkeypatch):
     assert out[:, -2:].toarray().tolist() == dense.tolist()
 
 
-def test_finbert_ctx_matrix_zero_fills_missing(monkeypatch):
+def test_finbert_ctx_matrix_zero_fills_missing_only_when_explicit(monkeypatch):
+    """Zero-fill is an explicitly-named fallback, not the default."""
     monkeypatch.setattr(
         "signal_lab.models.novelty.load_embedding",
         lambda text, cache_dir=None: None,
     )
     out = embeddings.finbert_ctx_matrix(
-        ["nope"], dense_extra=None, log=lambda *a, **k: None
+        ["nope"], dense_extra=None, log=lambda *a, **k: None, on_missing="zero"
     )
     assert out.shape == (1, 768)
     assert (out == 0).all()
+
+
+def test_finbert_ctx_matrix_raises_on_missing_by_default(monkeypatch):
+    """Default policy is loud failure: MissingEmbeddingError naming the
+    count and the cache directory."""
+    monkeypatch.setattr(
+        "signal_lab.models.novelty.load_embedding",
+        lambda text, cache_dir=None: None,
+    )
+    with pytest.raises(embeddings.MissingEmbeddingError) as ei:
+        embeddings.finbert_ctx_matrix(["nope"], log=lambda *a, **k: None)
+    msg = str(ei.value)
+    assert "1/1" in msg
+    assert "finbert" in msg  # cache dir named
+    assert "on_missing='zero'" in msg  # explicit fallback named
+
+
+def test_finbert_ctx_matrix_rejects_bad_policy():
+    with pytest.raises(ValueError, match="on_missing"):
+        embeddings.finbert_ctx_matrix(["x"], log=lambda *a, **k: None,
+                                      on_missing="bogus")
 
 
 def test_finbert_ctx_matrix_no_torch_import(monkeypatch):

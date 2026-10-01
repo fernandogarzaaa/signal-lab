@@ -49,6 +49,7 @@ from signal_lab.ingest import (
 from signal_lab.ingest.run import QUERY_TEMPLATE, UNIVERSE
 from signal_lab.models import featurize, make_text
 from signal_lab.models.context_features import CONTEXT_FEATURE_NAMES, build_context_features
+from signal_lab.models.lexicon import LEXICON_FEATURE_NAMES
 from signal_lab.nlp import extract_baseline
 
 ART = DATA_DIR / "artifacts"
@@ -229,6 +230,24 @@ def score_new_articles(items: list[dict], queried: str, log=print) -> pd.DataFra
     vec, model, name = load_scorer()
     log(f"[monitor] scoring {len(df)} articles with {name}")
 
+    # The feature space must match the artifact the model was trained on.
+    # featurize() always yields TF-IDF (5000) + 8 lexicon features; the 7
+    # market-context columns are only appended when the loaded model was
+    # trained with them. Anything else is a loud error, not a guess.
+    n_base = len(vec.vocabulary_) + len(LEXICON_FEATURE_NAMES)
+    n_expected = int(getattr(model, "n_features_in_", n_base))
+    use_ctx = n_expected == n_base + len(CONTEXT_FEATURE_NAMES)
+    if n_expected != n_base and not use_ctx:
+        raise ValueError(
+            f"model {name!r} expects {n_expected} features but the "
+            f"TF-IDF+lexicon base is {n_base} (context block is "
+            f"{len(CONTEXT_FEATURE_NAMES)}): unknown feature space; "
+            f"retrain the model or fix the artifact"
+        )
+    if not use_ctx:
+        log(f"[monitor] model trained without context features "
+            f"({n_expected} feats); scoring on TF-IDF+lexicon only")
+
     prices = _read_prices(sorted(set(df["ticker"]) | {BENCHMARK}))
     ctx = build_context_features(df, prices, benchmark=BENCHMARK, log=log)
     ctx_ok = ~ctx[CONTEXT_FEATURE_NAMES].isna().any(axis=1)
@@ -236,12 +255,15 @@ def score_new_articles(items: list[dict], queried: str, log=print) -> pd.DataFra
     proba = pd.Series(float("nan"), index=df.index)
     note = pd.Series("", index=df.index)
     if ctx_ok.any():
+        dense = ctx.loc[ctx_ok, CONTEXT_FEATURE_NAMES] if use_ctx else None
         X = featurize(
             make_text(df[ctx_ok]),
             vec,
-            dense_extra=ctx.loc[ctx_ok, CONTEXT_FEATURE_NAMES],
+            dense_extra=dense,
         )
         proba.loc[ctx_ok] = model.predict_proba(X)[:, 1]
+    if not use_ctx:
+        note.loc[ctx_ok] = "scored without context features (model trained pre-ctx)"
     note.loc[~ctx_ok] = "unscored: insufficient pre-publication price history"
     log(
         f"[monitor] scored {int(ctx_ok.sum())}/{len(df)} "

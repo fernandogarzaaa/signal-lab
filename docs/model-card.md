@@ -153,6 +153,12 @@ context feature carries stable weight).
 
 ## FinBERT text representation (0.3.0 workstream 2)
 
+**Missing-embedding policy (0.5.1):** `finbert_ctx_matrix` raises
+`MissingEmbeddingError` on cache misses by default, naming the miss count
+and the cache directory. The old silent zero-fill is available only as an
+explicit opt-in (`on_missing="zero"`). A missing or incomplete embedding
+cache can never masquerade as data.
+
 ProsusAI/finbert is used as a *frozen* feature extractor: one 768-dim
 vector per article (CLS pooling by default, attention-masked mean pooling
 on request; eval mode under `torch.no_grad()`, no fine-tuning).

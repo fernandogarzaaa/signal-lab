@@ -100,3 +100,74 @@ def test_single_class_fold_is_skipped_loudly():
     assert len(result["skipped_folds"]) >= 1
     assert all("train classes" in s["reason"] for s in result["skipped_folds"])
     assert len(result["folds"]) + len(result["skipped_folds"]) == 3
+
+
+def test_folds_carry_roc_auc_ranking_metric():
+    """Cross-sectional ranking under purged walk-forward: every scored
+    fold reports ROC-AUC (P(random positive outranks random negative)),
+    the ranking analogue of PR-AUC. Perfect ranking -> 1.0."""
+    rng = np.random.default_rng(3)
+    n = 200
+    dates = pd.date_range("2026-01-01", periods=n, freq="D", tz="UTC")
+    # Text perfectly separates the label: ranking must be (near) perfect.
+    texts = ["great earnings beat profit surge"] * n
+    labels = (rng.random(n) < 0.2).astype(int)
+    texts = ["great earnings beat profit surge" if l else "market flat today"
+             for l in labels]
+    df = pd.DataFrame({"published_at": dates, "text": texts, "label": labels})
+    result = run_walk_forward(
+        df, n_splits=3, purge_days=2, embargo_days=2, min_train=10,
+        log=lambda *a, **k: None,
+    )
+    assert result["folds"], "expected scored folds"
+    for f in result["folds"]:
+        assert "roc_auc" in f
+        assert 0.5 <= f["roc_auc"] <= 1.0
+    agg = result["aggregate"]["roc_auc"]
+    assert agg["mean"] > 0.9, f"separable data should rank well, got {agg['mean']}"
+    assert "ci95" in agg
+
+
+def test_provenance_block_records_run_context():
+    """build_provenance captures classifier, representation, label scheme,
+    code revision, and dataset shape: numbers without this are not
+    comparable across runs."""
+    from signal_lab.models.labels import LabelConfig
+    from signal_lab.models.walk_forward import build_provenance
+
+    df = _frame(n=60)
+    cfg = LabelConfig().validated()
+    prov = build_provenance("tfidf", cfg, df, log=lambda *a, **k: None)
+    assert prov["classifier"] == "logreg_balanced"
+    assert prov["representation"] == "tfidf"
+    assert prov["label_config"]["scheme"] == "windowed"
+    assert prov["label_config"]["window_days"] == 3
+    assert prov["dataset"]["n_rows"] == 60
+    assert prov["run_at"]
+    # code_revision is best-effort (None outside a git checkout), but the
+    # key must exist so consumers can rely on the schema.
+    assert "code_revision" in prov
+
+
+def test_provenance_block_reports_embedding_cache_coverage(tmp_path, monkeypatch):
+    """FinBERT runs record how many unique texts hit the embedding cache."""
+    from signal_lab.models.labels import LabelConfig
+    from signal_lab.models import embeddings as emb_mod
+    from signal_lab.models.walk_forward import build_provenance
+
+    monkeypatch.setattr(emb_mod, "default_cache_dir", lambda: tmp_path)
+    (tmp_path / "deadbeef.npy").write_bytes(b"x")  # one cached entry
+    monkeypatch.setattr(emb_mod, "cache_key", lambda t: "deadbeef" if t == "hit" else "miss-" + t)
+
+    df = pd.DataFrame({
+        "published_at": pd.date_range("2026-01-01", periods=3, freq="D", tz="UTC"),
+        "text": ["hit", "miss-a", "miss-b"],
+        "label": [1, 0, 0],
+    })
+    prov = build_provenance("finbert_ctx", LabelConfig().validated(), df,
+                            log=lambda *a, **k: None)
+    ec = prov["embedding_cache"]
+    assert ec["unique_texts"] == 3
+    assert ec["cached"] == 1
+    assert ec["missing"] == 2
+    assert "raise" in ec["missing_policy"]

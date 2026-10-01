@@ -111,12 +111,22 @@ class ModelReport:
     f1: float
     pr_auc: float
     accuracy: float
+    # Cross-sectional ranking quality: P(a random positive outranks a
+    # random negative) within the scored set. The ranking analogue of
+    # PR-AUC; 0.5 is chance.
+    roc_auc: float = float("nan")
     threshold: float = 0.5
     extras: dict = field(default_factory=dict)
 
 
 def _metrics(name, y_true, scores, threshold=0.5, extras=None) -> ModelReport:
     y_pred = (scores >= threshold).astype(int)
+    try:
+        from sklearn.metrics import roc_auc_score
+
+        roc = float(roc_auc_score(y_true, scores))
+    except Exception:
+        roc = float("nan")
     return ModelReport(
         name=name,
         precision=precision_score(y_true, y_pred, zero_division=0),
@@ -124,6 +134,7 @@ def _metrics(name, y_true, scores, threshold=0.5, extras=None) -> ModelReport:
         f1=f1_score(y_true, y_pred, zero_division=0),
         pr_auc=average_precision_score(y_true, scores),
         accuracy=float((y_pred == y_true).mean()),
+        roc_auc=roc,
         threshold=threshold,
         extras=extras or {},
     )

@@ -232,6 +232,7 @@ def run_walk_forward(
                 "n_test_pos": int(yte.sum()),
                 "n_purged": sp["n_purged"],
                 "pr_auc": round(rep.pr_auc, 4),
+                "roc_auc": round(rep.roc_auc, 4),
                 "f1": round(rep.f1, 4),
                 "precision": round(rep.precision, 4),
                 "recall": round(rep.recall, 4),
@@ -240,7 +241,8 @@ def run_walk_forward(
         )
         log(
             f"[wf] fold {sp['fold']}: train={len(tri_eff)} test={len(tei)} "
-            f"pos_rate={yte.mean():.3f} pr_auc={rep.pr_auc:.4f} f1={rep.f1:.4f}"
+            f"pos_rate={yte.mean():.3f} pr_auc={rep.pr_auc:.4f} "
+            f"roc_auc={rep.roc_auc:.4f} f1={rep.f1:.4f}"
         )
 
     def _agg(key):
@@ -281,12 +283,87 @@ def run_walk_forward(
         "skipped_folds": skipped,
         "aggregate": {
             "pr_auc": _agg("pr_auc"),
+            "roc_auc": _agg("roc_auc"),
             "f1": _agg("f1"),
             "precision": _agg("precision"),
             "recall": _agg("recall"),
             "baseline_pr_auc": _agg("baseline_pr_auc"),
         },
     }
+
+
+def build_provenance(
+    representation: str,
+    label_cfg,
+    df: "pd.DataFrame",
+    log=print,
+) -> dict:
+    """Provenance block for a walk-forward run: everything needed to
+    interpret the numbers later.
+
+    Records the classifier, representation, label scheme, code revision
+    (best-effort git SHA), timestamp, dataset shape/date range, and (for
+    FinBERT runs) the embedding-cache coverage. Numbers without this
+    block are not comparable across runs.
+    """
+    import subprocess
+    from datetime import datetime, timezone
+
+    try:
+        repo_root = Path(__file__).resolve().parents[3]
+        sha = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=repo_root, capture_output=True, text=True, timeout=10,
+        ).stdout.strip() or None
+        dirty = bool(
+            subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=repo_root, capture_output=True, text=True, timeout=10,
+            ).stdout.strip()
+        )
+    except Exception as exc:  # noqa: BLE001 - provenance is best-effort
+        log(f"[wf] provenance: git revision unavailable ({exc})")
+        sha, dirty = None, None
+    prov = {
+        "run_at": datetime.now(timezone.utc).isoformat(),
+        "code_revision": sha,
+        "working_tree_dirty": dirty,
+        "classifier": "logreg_balanced",
+        "representation": representation,
+        "label_config": {
+            "scheme": label_cfg.scheme,
+            "window_days": label_cfg.window_days,
+            "quantile": label_cfg.quantile,
+            "benchmark": label_cfg.benchmark,
+            "attention_enabled": label_cfg.attention_enabled,
+            "attention_min_articles": label_cfg.attention_min_articles,
+            "attention_top_quartile": label_cfg.attention_top_quartile,
+        },
+        "dataset": {
+            "n_rows": int(len(df)),
+            "n_labeled": int(df["label"].notna().sum()) if "label" in df else None,
+            "pub_start": str(df["published_at"].min()),
+            "pub_end": str(df["published_at"].max()),
+        },
+    }
+    if representation == "finbert_ctx":
+        from signal_lab.models.embeddings import (
+            cache_key,
+            default_cache_dir,
+        )
+
+        cdir = default_cache_dir()
+        texts = df["text"].fillna("").astype(str) if "text" in df else df["title"].fillna("").astype(str)
+        keys = {cache_key(t) for t in texts}
+        cached = sum((cdir / f"{k}.npy").exists() for k in keys)
+        prov["embedding_cache"] = {
+            "cache_dir": str(cdir),
+            "unique_texts": len(keys),
+            "cached": cached,
+            "missing": len(keys) - cached,
+            "missing_policy": "raise (MissingEmbeddingError; zero-fill only via explicit on_missing='zero')",
+        }
+    return prov
 
 
 def main() -> None:
@@ -297,8 +374,9 @@ def main() -> None:
         choices=["tfidf", "finbert_ctx"],
         default="finbert_ctx",
         help="text representation: tfidf (TF-IDF+lexicon, 0.3.0 default) or "
-        "finbert_ctx (FinBERT+7 ctx, 0.4.0 default; cache-only, zero-fills "
-        "texts without a cached embedding)",
+        "finbert_ctx (FinBERT+7 ctx, 0.4.0 default; cache-only, raises "
+        "MissingEmbeddingError on cache misses unless on_missing='zero' "
+        "is passed explicitly)",
     )
     ap.add_argument(
         "--json",
@@ -358,6 +436,7 @@ def main() -> None:
         train_label_source=args.train_labels,
     )
     result["representation"] = args.repr
+    result["provenance"] = build_provenance(args.repr, label_cfg, df, log=log)
     ART.mkdir(parents=True, exist_ok=True)
     (ART / "walk_forward.json").write_text(json.dumps(sanitize_json(result), indent=2))
     log(f"[wf] wrote {ART / 'walk_forward.json'}")
