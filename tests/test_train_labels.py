@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from signal_lab.models import train
+from signal_lab.models.walk_forward import run_walk_forward
 from signal_lab.models.train_labels import (
     TRAIN_LABEL_COL,
     TRAIN_LABEL_SOURCES,
@@ -158,3 +159,71 @@ def test_train_label_col_missing_column_raises():
     df = _synthetic_df().drop(columns=[TRAIN_LABEL_COL])
     with pytest.raises(ValueError, match="not in df columns"):
         train(df, text_col="title", train_label_col=TRAIN_LABEL_COL)
+
+
+def _wf_df(n=60, abstain_every=0, flip_train=False):
+    rows = []
+    for i in range(n):
+        good = i % 2 == 0
+        tl = int(not good) if flip_train else int(good)
+        train_label = float("nan") if abstain_every and i % abstain_every == 0 else float(tl)
+        rows.append(
+            {
+                "title": f"{'good' if good else 'bad'} news {i}",
+                "body_snippet": "",
+                "published_at": pd.Timestamp("2024-01-01") + pd.Timedelta(days=i),
+                "label": int(good),
+                TRAIN_LABEL_COL: train_label,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def test_walk_forward_train_labels_swap():
+    # Flipped training labels must hurt the weak-label test metrics,
+    # proving the fold loop trains on the alternate labels.
+    flipped = run_walk_forward(
+        _wf_df(flip_train=True), n_splits=2, purge_days=0, embargo_days=0, min_train=5,
+        train_label_col=TRAIN_LABEL_COL, log=lambda *a, **k: None,
+    )
+    correct = run_walk_forward(
+        _wf_df(), n_splits=2, purge_days=0, embargo_days=0, min_train=5,
+        log=lambda *a, **k: None,
+    )
+    f_mean = flipped["aggregate"]["pr_auc"]["mean"]
+    c_mean = correct["aggregate"]["pr_auc"]["mean"]
+    assert f_mean < 0.6 < c_mean, (f_mean, c_mean)
+
+
+def test_walk_forward_abstentions_excluded_from_train_only():
+    res = run_walk_forward(
+        _wf_df(abstain_every=3), n_splits=2, purge_days=0, embargo_days=0,
+        min_train=5, train_label_col=TRAIN_LABEL_COL, log=lambda *a, **k: None,
+    )
+    assert res["folds"], "expected at least one scored fold"
+    for f in res["folds"]:
+        # every third train row abstained -> train shrinks, test untouched
+        assert f["n_train"] < f["n_test"] * 2
+    assert res["train_labels"]["test_labels"].startswith("weak")
+
+
+def test_walk_forward_missing_train_label_col_raises():
+    with pytest.raises(ValueError, match="not in df columns"):
+        run_walk_forward(
+            _wf_df(), n_splits=2, purge_days=0, embargo_days=0, min_train=5,
+            train_label_col="nope", log=lambda *a, **k: None,
+        )
+
+
+def test_walk_forward_records_train_label_source():
+    res = run_walk_forward(
+        _wf_df(), n_splits=2, purge_days=0, embargo_days=0, min_train=5,
+        train_label_col=TRAIN_LABEL_COL, train_label_source="jev-conf06",
+        log=lambda *a, **k: None,
+    )
+    assert res["train_labels"]["source"] == "jev-conf06"
+    res_weak = run_walk_forward(
+        _wf_df(), n_splits=2, purge_days=0, embargo_days=0, min_train=5,
+        log=lambda *a, **k: None,
+    )
+    assert res_weak["train_labels"]["source"] == "weak"
