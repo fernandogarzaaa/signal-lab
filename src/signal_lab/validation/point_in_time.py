@@ -64,6 +64,70 @@ FEATURE_POINT_IN_TIME: dict[str, dict[str, str]] = {
         "availability": "at prediction time (metadata of the article itself)",
         "measures": "UTC publish hour in quarters of the day",
     },
+    # Phase 2 price/volume features: same as-of timing as the ctx_* price
+    # features (latest trading day strictly before pub_date); they differ
+    # only in what they measure.
+    "px_ret_1d": {
+        **_PRICE_TIMING,
+        "measures": "trailing 1-trading-day simple return ending on D",
+    },
+    "px_rsi_14": {
+        **_PRICE_TIMING,
+        "measures": "Wilder's RSI(14) on D, 0-100",
+    },
+    "px_macd_hist": {
+        **_PRICE_TIMING,
+        "measures": "MACD(12,26,9) histogram (MACD line minus signal) on D",
+    },
+    "px_ma_dist_20": {
+        **_PRICE_TIMING,
+        "measures": "(close[D] - 20d SMA[D]) / 20d SMA[D]",
+    },
+    "px_ma_dist_50": {
+        **_PRICE_TIMING,
+        "measures": "(close[D] - 50d SMA[D]) / 50d SMA[D]",
+    },
+    "px_realvol_5d": {
+        **_PRICE_TIMING,
+        "measures": "sample std (ddof=1) of daily log returns over the "
+        "trailing 5 trading days ending on D, daily units",
+    },
+    "px_realvol_20d": {
+        **_PRICE_TIMING,
+        "measures": "sample std (ddof=1) of daily log returns over the "
+        "trailing 20 trading days ending on D, daily units",
+    },
+    "px_atr_14": {
+        **_PRICE_TIMING,
+        "measures": "Wilder's ATR(14) on D divided by close[D]",
+    },
+    "px_vol_z_20": {
+        **_PRICE_TIMING,
+        "measures": "volume[D] z-scored vs its trailing 20 trading days",
+    },
+    "px_relvol_20": {
+        **_PRICE_TIMING,
+        "measures": "volume[D] / median trailing-20d volume",
+    },
+    "px_vs_spy_5d": {
+        **_PRICE_TIMING,
+        "measures": "ticker 5d trailing return minus SPY 5d trailing return, "
+        "same window ending on D",
+    },
+    "px_vs_spy_20d": {
+        **_PRICE_TIMING,
+        "measures": "ticker 20d trailing return minus SPY 20d trailing "
+        "return, same window ending on D",
+    },
+    "mkt_spy_ret_20d": {
+        **_PRICE_TIMING,
+        "measures": "SPY trailing 20-trading-day return ending on D",
+    },
+    "mkt_spy_vol_20d": {
+        **_PRICE_TIMING,
+        "measures": "sample std (ddof=1) of SPY daily log returns over the "
+        "trailing 20 trading days ending on D, daily units",
+    },
 }
 
 

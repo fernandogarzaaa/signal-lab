@@ -47,11 +47,18 @@ from signal_lab.models import (
 )
 from signal_lab.models.context_features import (
     CONTEXT_FEATURE_NAMES,
+    PRICE_FEATURE_NAMES,
     build_context_features,
+    build_price_features,
 )
 from signal_lab.models.labels import LabelConfig, apply_legacy_labeling, build_labels
 from signal_lab.models.lexicon import LEXICON_FEATURE_NAMES
 from signal_lab.nlp import extract_baseline
+from signal_lab.validation.targets import (
+    TargetConfig,
+    build_targets,
+    target_column_names,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ART = REPO_ROOT / "data" / "artifacts"
@@ -66,7 +73,7 @@ def build_dataset(
     news = con.execute(
         "SELECT url, title, body_snippet, published_at FROM news_raw WHERE title <> ''"
     ).fetchdf()
-    prices = con.execute("SELECT ticker, date, close FROM prices_daily").fetchdf()
+    prices = con.execute("SELECT ticker, date, open, high, low, close, volume FROM prices_daily").fetchdf()
     con.close()
     prices["date"] = pd.to_datetime(prices["date"]).dt.date
 
@@ -81,7 +88,7 @@ def build_dataset(
         )
         store_prices(bench)
         con = duckdb.connect(DB_PATH, read_only=True)
-        prices = con.execute("SELECT ticker, date, close FROM prices_daily").fetchdf()
+        prices = con.execute("SELECT ticker, date, open, high, low, close, volume FROM prices_daily").fetchdf()
         con.close()
         prices["date"] = pd.to_datetime(prices["date"]).dt.date
 
@@ -140,6 +147,31 @@ def build_dataset(
         f"[m3] legacy label_config: positive_rate={label_block['positive_rate']:.3f}, "
         f"top-decile cutoff={label_block['cutoff']:+.4f} (global; validation uses per-fold)"
     )
+    # Phase 2: versioned targets and trailing price/volume features. This
+    # changes no Phase 1 methodology: t0/t1 semantics, the label window,
+    # and the purge/embargo machinery are untouched. Note that excess_3d
+    # is formula-identical to the existing abn_ret column (t0-anchored,
+    # 3-trading-day window, same benchmark leg) -- the v2 target set
+    # subsumes the Phase 1 label input. The per-fold top-decile cutoff
+    # that turns it into the primary classification label stays in
+    # signal_lab.validation.labels (a train-sample statistic; train-only).
+    tgt_cfg = TargetConfig().validated()
+    targets = build_targets(
+        legacy_labeled[["ticker", "t0"]], prices, tgt_cfg, log=log
+    )
+    legacy_labeled = pd.concat([legacy_labeled, targets], axis=1)
+    px = build_price_features(
+        legacy_labeled, prices, benchmark=label_cfg.benchmark, log=log
+    )
+    n_px_nan = int(px[PRICE_FEATURE_NAMES].isna().any(axis=1).sum())
+    if n_px_nan:
+        log(
+            f"[m3] price features: {n_px_nan} rows with NaN "
+            "(insufficient pre-publication history; kept, not filled)"
+        )
+    legacy_labeled = pd.concat(
+        [legacy_labeled, px[PRICE_FEATURE_NAMES]], axis=1
+    )
     cols = [
         "url",
         "text",
@@ -155,7 +187,7 @@ def build_dataset(
         "abn_ret",
         "label",
         "ctx_asof",
-    ] + CONTEXT_FEATURE_NAMES
+    ] + CONTEXT_FEATURE_NAMES + target_column_names(tgt_cfg) + PRICE_FEATURE_NAMES
     out = legacy_labeled[cols].reset_index(drop=True)
     return out, label_block
 
