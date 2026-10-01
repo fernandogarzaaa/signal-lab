@@ -95,6 +95,12 @@ def test_run_coerces_object_port_ret_before_ttest():
         "strength": pd.Series(dtype=object),
     })
     mixed = pd.concat([real, empty_object], ignore_index=True)
+    # pandas>=2.2 may infer float64 on concat with an empty object frame;
+    # force the hostile input explicitly so the precondition holds on any
+    # pandas version (drive-by, 2026-10-02: tabpfn==2.0.6 pins pandas<3,
+    # which resolves CI to pandas 2.3.3 where the bare concat infers
+    # float64 and this precondition failed).
+    mixed["strength"] = mixed["strength"].astype(object)
     assert mixed["strength"].dtype == object  # precondition: the hostile input
     bnh = pd.DataFrame([{
         "ticker": "XXX",
