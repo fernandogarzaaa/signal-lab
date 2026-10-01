@@ -169,6 +169,19 @@
     </div>
     <div id="analogues-out"><div class="empty">Finds past news days with a similar move size, news sentiment and news volume, and shows the forward returns that followed.</div></div>
   </div>
+
+  <h2 style="margin-top:32px">Watchlist <span style="text-transform:none;letter-spacing:0">(near-real-time GDELT monitor)</span></h2>
+  <div class="panel">
+    <div class="rag-controls">
+      <input id="wl-add" placeholder="Add ticker (e.g. NVDA)" maxlength="8" style="width:160px;text-transform:uppercase">
+      <button id="btn-wl-add">Add</button>
+      <button id="btn-wl-refresh">Refresh</button>
+      <button id="btn-wl-poll" class="primary">Check now</button>
+      <span class="dim">GDELT refreshes ~every 15 min · the server polls in the background · a news monitor, not a predictor</span>
+    </div>
+    <div id="wl-status" style="margin-bottom:10px"></div>
+    <div id="wl-out"><div class="empty">Loading watchlist…</div></div>
+  </div>
 </main>
 
 <footer>signallab · the browser is the CLI · stages never fake results: failures surface here</footer>
@@ -633,12 +646,104 @@ async function findAnalogues(){
   btn.disabled = false;
 }
 
+/* ---------- watchlist (workstream 3) ---------- */
+function relTime(iso){
+  if (!iso) return 'never';
+  const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (s < 60) return s + 's ago';
+  const m = Math.round(s / 60);
+  if (m < 60) return m + ' min ago';
+  const h = Math.round(m / 60);
+  if (h < 48) return h + ' h ago';
+  return Math.round(h / 24) + ' d ago';
+}
+function sentBadge(a){
+  if (a.proba === null || a.proba === undefined)
+    return `<span class="pill warn" title="${esc(a.score_note || 'unscored')}">unscored</span>`;
+  const cls = a.proba >= 0.6 ? 'ok' : (a.proba <= 0.4 ? 'bad' : 'warn');
+  const lbl = a.proba >= 0.6 ? 'positive' : (a.proba <= 0.4 ? 'negative' : 'neutral');
+  return `<span class="pill ${cls}" title="P(positive) = ${a.proba}">${lbl} ${Math.round(a.proba * 100)}%</span>`;
+}
+async function loadWatchlist(){
+  const box = $('wl-out'), status = $('wl-status');
+  box.innerHTML = `<div class="empty">Loading watchlist…</div>`;
+  try {
+    const r = await fetch('/api/watchlist');
+    const d = await r.json();
+    if (d.error) { box.innerHTML = empty('Watchlist unavailable: ' + esc(d.error)); status.innerHTML = ''; return; }
+    renderWatchlist(d);
+  } catch(e){ box.innerHTML = empty('Watchlist unavailable: ' + esc(e.message)); status.innerHTML = ''; }
+}
+function renderWatchlist(d){
+  const m = d.monitor || {};
+  const st = $('wl-status');
+  if (m.status === 'never-polled' || !m.polled_at) {
+    st.innerHTML = `<span class="pill warn">not polled yet</span> <span class="dim">Press “Check now”. GDELT refreshes roughly every 15 minutes.</span>`;
+  } else {
+    const failed = Object.entries(m.tickers || {}).filter(([t, r]) => r.status !== 'ok');
+    const stale = (Date.now() - new Date(m.polled_at).getTime()) > 45 * 60 * 1000;
+    st.innerHTML =
+      `<span class="pill ${m.status === 'ok' && !stale ? 'ok' : 'warn'}">last checked ${esc(relTime(m.polled_at))}</span> ` +
+      (m.status !== 'ok' ? `<span class="pill bad">poll degraded</span> ` : '') +
+      (stale ? `<span class="pill warn">stale: older than 45 min</span> ` : '') +
+      (m.price_error ? `<span class="pill bad" title="${esc(m.price_error)}">price fetch failed</span> ` : '') +
+      failed.map(([t, r]) => `<span class="pill bad" title="${esc(r.error || 'failed')}">${esc(t)} poll failed</span>`).join('') +
+      (m.totals ? ` <span class="dim">last poll: ${m.totals.articles_new} new articles, ${m.totals.articles_scored} scored</span>` : '');
+  }
+  const box = $('wl-out');
+  if (!d.tickers.length) { box.innerHTML = empty('Watchlist is empty. Add a ticker above.'); return; }
+  box.innerHTML = `<div class="cards">` + d.tickers.map((t) => {
+    const p = (d.prices || {})[t] || {};
+    const chg = p.change_pct;
+    const chgHtml = chg === null || chg === undefined ? '' :
+      `<span class="pill ${chg >= 0 ? 'ok' : 'bad'}">${chg >= 0 ? '+' : ''}${chg}% today</span>`;
+    const arts = (d.articles || {})[t] || [];
+    const artsHtml = arts.length ? `<table>` + arts.map((a) =>
+      `<tr><td style="white-space:nowrap" class="dim">${esc(relTime(a.published_at))}</td>` +
+      `<td>${sentBadge(a)}</td>` +
+      `<td><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.title)}</a></td></tr>`
+    ).join('') + `</table>` : `<div class="empty">No recent articles.</div>`;
+    return `<div class="card"><div style="margin-bottom:8px"><b>${esc(t)}</b> ` +
+      (p.last_close !== undefined ? `<span class="dim">$${p.last_close}</span> ${chgHtml}` : `<span class="dim">no price data</span>`) +
+      ` <button data-wlrm="${esc(t)}" style="float:right">remove</button></div>${artsHtml}</div>`;
+  }).join('') + `</div>`;
+  box.querySelectorAll('[data-wlrm]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm(`Remove ${b.dataset.wlrm} from the watchlist?`)) return;
+    const r = await fetch('/api/watchlist/' + encodeURIComponent(b.dataset.wlrm), { method: 'DELETE' });
+    const j = await r.json();
+    if (j.error) alert(j.error); else loadWatchlist();
+  }));
+}
+async function wlAdd(){
+  const v = $('wl-add').value.trim().toUpperCase();
+  if (!v) return;
+  const r = await fetch('/api/watchlist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticker: v }) });
+  const j = await r.json();
+  if (j.error) alert(j.error);
+  else { $('wl-add').value = ''; loadWatchlist(); }
+}
+async function wlPoll(){
+  const b = $('btn-wl-poll');
+  b.disabled = true; b.textContent = 'Checking…';
+  try {
+    const r = await fetch('/api/monitor/poll', { method: 'POST' });
+    const j = await r.json();
+    if (j.error) alert(j.error);
+    else setTimeout(loadWatchlist, 5000); // background poll; refresh shortly after
+  } finally { b.disabled = false; b.textContent = 'Check now'; }
+}
+
 /* ---------- wire up ---------- */
 buildCards();
 $('btn-demo').addEventListener('click', runFullDemo);
 $('btn-explain').addEventListener('click', explainSelected);
 $('btn-move').addEventListener('click', explainMove);
 $('btn-analogues').addEventListener('click', findAnalogues);
+$('btn-wl-add').addEventListener('click', wlAdd);
+$('btn-wl-refresh').addEventListener('click', loadWatchlist);
+$('btn-wl-poll').addEventListener('click', wlPoll);
+$('wl-add').addEventListener('keydown', (e) => { if (e.key === 'Enter') wlAdd(); });
+loadWatchlist();
 $('mv-ticker').addEventListener('keydown', (e) => { if (e.key === 'Enter') explainMove(); });
 $('mv-date').addEventListener('keydown', (e) => { if (e.key === 'Enter') explainMove(); });
 $('btn-seed').addEventListener('click', async ()=>{
