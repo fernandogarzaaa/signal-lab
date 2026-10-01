@@ -142,3 +142,24 @@ def test_conditioning_is_point_in_time(monkeypatch):
         assert t0_max < pd.Timestamp(sp["test_start"]), (
             "conditioning set reached into the test range"
         )
+
+
+def test_pca_drops_degenerate_output_components():
+    """Rank-deficient input must not yield near-zero-variance PCA output.
+
+    Regression test: degenerate output components (train std ~1e-110)
+    underflow to 0 in float32 and trigger environment-dependent NaNs
+    inside TabPFN's encoder (observed as flaky CI failures on some
+    runner CPUs). pca_features must drop them.
+    """
+    rng = np.random.default_rng(11)
+    base = rng.normal(size=(80, 5))
+    proj = rng.normal(size=(5, 15))
+    # 20 input features of rank 5 plus 1e-13 noise: PCA will emit
+    # degenerate near-zero-variance trailing components.
+    Xtr = np.hstack([base, base @ proj + 1e-13 * rng.normal(size=(80, 15))])
+    Xte = rng.normal(size=(20, 20))
+    Ztr, Zte, _ = ta.pca_features(Xtr, Xte, n_components=15)
+    assert Ztr.shape[1] < 15, "degenerate components were not dropped"
+    assert np.all(Ztr.std(axis=0) > 1e-12)
+    assert np.all(np.isfinite(Ztr)) and np.all(np.isfinite(Zte))
