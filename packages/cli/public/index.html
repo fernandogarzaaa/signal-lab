@@ -153,6 +153,7 @@
 
   <h2 style="margin-top:32px">Why did it move? <span style="text-transform:none;letter-spacing:0">(evidence for a ticker + date)</span></h2>
   <div class="panel">
+    <p class="dim" style="margin:0 0 12px">Signal Lab explains past moves; it does not predict future ones. Sentiment model PR-AUC 0.127 on purged walk-forward (see Model diagnostics).</p>
     <div class="rag-controls">
       <input id="mv-ticker" placeholder="Ticker (e.g. MSFT)" maxlength="6" style="width:150px;text-transform:uppercase">
       <input id="mv-date" type="date" value="2026-01-29">
@@ -549,7 +550,7 @@ function renderMove(r){
     `</div>`);
   out.push(moveSvg(r));
   const drivers = r.drivers || [];
-  out.push(`<h3 style="margin:18px 0 10px;font-size:14px">News drivers (${drivers.length})</h3>`);
+  out.push(`<h3 style="margin:18px 0 10px;font-size:14px">News drivers (${drivers.length}) <span class="dim" style="font-weight:normal">— articles from the event window</span></h3>`);
   out.push(drivers.length
     ? `<div class="cards">${drivers.map((d) => `
       <div class="card">
@@ -559,7 +560,7 @@ function renderMove(r){
         <p class="desc">${esc(d.quote || '')}</p>
       </div>`).join('')}</div>`
     : empty('No driver articles in the window.'));
-  out.push(`<h3 style="margin:18px 0 10px;font-size:14px">10-K context</h3>`);
+  out.push(`<h3 style="margin:18px 0 10px;font-size:14px">10-K context <span class="dim" style="font-weight:normal">— company background from SEC filings, not news</span></h3>`);
   const ctx = r.context || {};
   if (ctx.note) {
     out.push(`<div class="note">${esc(ctx.note)} — build the RAG index to enable cited 10-K context.</div>`);
