@@ -108,6 +108,19 @@ def _price_block(ticker: str, event_day: pd.Timestamp,
 
     abnormal_z, is_outlier = None, False
     hist = days.iloc[max(0, idx - TRAILING_DAYS):idx]
+    # Fail-loud leakage guard: the trailing baseline used for the abnormal
+    # z-score must end strictly before the event day. If a future refactor
+    # lets the baseline touch the event day, the z-score would absorb the
+    # move it is supposed to flag, so the computation dies here.
+    from signal_lab.stats.leakage_guard import (
+        assert_baseline_precedes_event_window,
+    )
+
+    assert_baseline_precedes_event_window(
+        hist["date"].tolist(),
+        event_day,
+        context=f"abnormal_z baseline for {ticker}@{event_day.date().isoformat()}",
+    )
     if len(hist) >= 2:
         rets = hist["close"].pct_change().dropna()
     else:

@@ -123,11 +123,44 @@ def event_ar_panel(
     cols = ["event_id", "ticker", "event_date", "offset", "ar", "in_event"]
     if not rows:
         return pd.DataFrame(columns=cols)
-    return pd.DataFrame(rows, columns=cols)
+    panel = pd.DataFrame(rows, columns=cols)
+    _assert_panel_windows_disjoint(panel, context="event_ar_panel")
+    return panel
+
+
+def _assert_panel_windows_disjoint(panel: pd.DataFrame, context: str = "") -> None:
+    """Fail loudly if any event's estimation (baseline) offsets reach on or
+    after that event's event-window start offset.
+
+    Fail-loud leakage guard (pattern from jiamingpan/agent-quant-research):
+    a baseline that touches the event window contaminates CAR
+    standardization and every p-value downstream, so the computation dies
+    here instead of producing a silently biased study.
+    """
+    from signal_lab.stats.leakage_guard import (
+        assert_baseline_precedes_event_window,
+    )
+
+    for eid, g in panel.groupby("event_id"):
+        base = g.loc[~g["in_event"], "offset"].to_numpy()
+        evt = g.loc[g["in_event"], "offset"].to_numpy()
+        if len(evt) == 0 or len(base) == 0:
+            continue  # degenerate panels pass vacuously; size checks apply later
+        assert_baseline_precedes_event_window(
+            base,
+            int(evt.min()),
+            context=f"{context} event_id={eid}",
+        )
 
 
 def _scar_frame(panel: pd.DataFrame, pre: int, post: int) -> pd.DataFrame:
-    """One row per event: car, s_est, scar, plus the estimation AR series."""
+    """One row per event: car, s_est, scar, plus the estimation AR series.
+
+    The panel is re-checked by the fail-loud baseline/event leakage guard
+    before the split: a hand-built or refactored panel whose estimation
+    rows reach on or after the event-window start dies here.
+    """
+    _assert_panel_windows_disjoint(panel, context="_scar_frame")
     L = pre + post + 1
     out = []
     for eid, g in panel.groupby("event_id"):
