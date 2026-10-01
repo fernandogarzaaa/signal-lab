@@ -41,3 +41,4 @@ and carry no predictive claims.
 | ID | Date (UTC) | Item | Result pointer |
 |---|---|---|---|
 | APP-000 | 2026-10-01 | Program closure note | docs/PROGRAM_STATUS.md |
+| APP-001 | 2026-10-01 | Split-conformal abstention (src/signal_lab/models/conformal.py): rolling-window calibration per fold, abstain on empty/non-singleton sets; replaces failed ad-hoc margins | tests/test_conformal.py (10 tests) |
