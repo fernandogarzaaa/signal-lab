@@ -60,6 +60,20 @@
   .cite .q{display:block;color:var(--dim);margin-top:2px;max-width:640px}
   #rag-text{font-size:13.5px;line-height:1.65;white-space:pre-wrap}
   select{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font-size:13px;max-width:100%}
+  input{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font-size:13px}
+  input[type="date"]{color-scheme:dark}
+  .badge{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;letter-spacing:.5px}
+  .badge.pos{color:#b7f0c2;background:#12341f;border:1px solid #2a5a36}
+  .badge.neg{color:#ffb4ab;background:#3d1715;border:1px solid #6b2d28}
+  .badge.out{color:var(--amber);background:#2e2410;border:1px solid #5a4a22}
+  .card h3 a{color:var(--fg);text-decoration:none}
+  .card h3 a:hover{color:var(--blue);text-decoration:underline}
+  .dim{color:var(--dim);font-size:12px;font-family:var(--mono)}
+  .stats{display:flex;gap:18px;flex-wrap:wrap;margin:12px 0}
+  .stat .v{font-family:var(--mono);font-size:20px}
+  .stat .l{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:1px}
+  .note{background:#141a26;border:1px solid var(--line);border-left:3px solid var(--amber);
+    border-radius:6px;padding:8px 12px;margin:8px 0;font-size:13px;color:var(--dim)}
   .rag-controls{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
   canvas{max-height:300px}
   footer{color:var(--dim);font-size:12px;text-align:center;margin-top:40px;font-family:var(--mono)}
@@ -135,6 +149,16 @@
       <button id="btn-explain">Explain</button>
     </div>
     <div id="rag-out"><div class="empty">Run the RAG stage (or pick an event and press Explain) to generate a cited explanation.</div></div>
+  </div>
+
+  <h2 style="margin-top:32px">Why did it move? <span style="text-transform:none;letter-spacing:0">(evidence for a ticker + date)</span></h2>
+  <div class="panel">
+    <div class="rag-controls">
+      <input id="mv-ticker" placeholder="Ticker (e.g. MSFT)" maxlength="6" style="width:150px;text-transform:uppercase">
+      <input id="mv-date" type="date" value="2026-01-29">
+      <button id="btn-move" class="primary">Explain the move</button>
+    </div>
+    <div id="move-out"><div class="empty">Pick a ticker and a date to see the price move, the news drivers, and cited 10-K context.</div></div>
   </div>
 </main>
 
@@ -450,10 +474,105 @@ async function explainSelected(){
   $('btn-explain').disabled = false;
 }
 
+/* ---------- why did it move? ---------- */
+function esc(s){
+  return String(s ?? '').replace(/[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function moveSvg(r){
+  const pts = (r.timeline && r.timeline.prices) || [];
+  if (!pts.length) return '';
+  const W = 680, H = 240, P = 34, span = Math.max(1, pts.length - 1);
+  const closes = pts.map((p) => p.close);
+  const mn = Math.min(...closes), mx = Math.max(...closes), rg = (mx - mn) || 1;
+  const X = (i) => P + (i * (W - 2 * P)) / span;
+  const Y = (v) => H - P - ((v - mn) / rg) * (H - 2 * P);
+  const line = pts.map((p, i) => `${X(i).toFixed(1)},${Y(p.close).toFixed(1)}`).join(' ');
+  const evIdx = pts.findIndex((p) => p.date === r.date);
+  const marks = ((r.timeline && r.timeline.markers) || []).map((m) => {
+    let bi = 0;
+    pts.forEach((p, i) => { if (p.date <= m.date) bi = i; });
+    return `<circle cx="${X(bi).toFixed(1)}" cy="${(Y(pts[bi].close) - 9).toFixed(1)}" r="5" fill="#d29922">` +
+      `<title>${esc(m.headline)} (${esc(m.date)})</title></circle>`;
+  }).join('');
+  const evMark = evIdx >= 0
+    ? `<line x1="${X(evIdx)}" y1="${P}" x2="${X(evIdx)}" y2="${H - P}" stroke="#58a6ff" ` +
+      `stroke-dasharray="5,4" stroke-width="1.5"><title>event day ${esc(r.date)}</title></line>` : '';
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="price timeline">` +
+    `<polyline points="${line}" fill="none" stroke="#3fb950" stroke-width="2"/>${evMark}${marks}` +
+    `<text x="${P}" y="${H - 8}" fill="#8b93a3" font-size="11" font-family="monospace">${esc(pts[0].date)}</text>` +
+    `<text x="${W - P}" y="${H - 8}" fill="#8b93a3" font-size="11" font-family="monospace" text-anchor="end">${esc(pts[pts.length - 1].date)}</text>` +
+    `<text x="${P}" y="${P - 8}" fill="#8b93a3" font-size="11" font-family="monospace">$${mx.toFixed(2)}</text>` +
+    `<text x="${P}" y="${H - P + 14}" fill="#8b93a3" font-size="11" font-family="monospace">$${mn.toFixed(2)}</text></svg>`;
+}
+
+function renderMove(r){
+  const p = r.price || {};
+  const pct = (v) => (v == null ? 'n/a' : `${(v * 100).toFixed(2)}%`);
+  const z = p.abnormal_z == null ? 'n/a' : p.abnormal_z.toFixed(2);
+  const dirColor = (p.ret_1d ?? 0) >= 0 ? 'var(--green)' : 'var(--red)';
+  const out = [];
+  out.push(`<div class="stats">` +
+    `<div class="stat"><div class="v" style="color:${dirColor}">${pct(p.ret_1d)}</div><div class="l">1-day return</div></div>` +
+    `<div class="stat"><div class="v">${pct(p.ret_3d)}</div><div class="l">3-day return</div></div>` +
+    `<div class="stat"><div class="v">${z}</div><div class="l">abnormal z (60d)</div></div>` +
+    `<div class="stat"><div class="v">${p.is_outlier ? '<span class="badge out">OUTLIER</span>' : '<span class="dim">normal</span>'}</div><div class="l">|z| &gt; 2</div></div>` +
+    `<div class="stat"><div class="v">${p.close == null ? 'n/a' : '$' + p.close.toFixed(2)}</div><div class="l">close ${esc(r.date)}</div></div>` +
+    `</div>`);
+  out.push(moveSvg(r));
+  const drivers = r.drivers || [];
+  out.push(`<h3 style="margin:18px 0 10px;font-size:14px">News drivers (${drivers.length})</h3>`);
+  out.push(drivers.length
+    ? `<div class="cards">${drivers.map((d) => `
+      <div class="card">
+        <div class="row"><span class="badge ${d.direction === 'positive' ? 'pos' : 'neg'}">${esc(d.direction).toUpperCase()} ${(d.proba * 100).toFixed(0)}%</span>
+        <span class="dim">${esc(d.source_domain || '')} · ${esc(d.pub_date || '')}</span></div>
+        <h3 style="margin-top:8px"><a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.headline)}</a></h3>
+        <p class="desc">${esc(d.quote || '')}</p>
+      </div>`).join('')}</div>`
+    : empty('No driver articles in the window.'));
+  out.push(`<h3 style="margin:18px 0 10px;font-size:14px">10-K context</h3>`);
+  const ctx = r.context || {};
+  if (ctx.note) {
+    out.push(`<div class="note">${esc(ctx.note)} — build the RAG index to enable cited 10-K context.</div>`);
+  } else {
+    out.push(`<div style="white-space:pre-wrap;font-size:13.5px;line-height:1.65">${esc(ctx.text || '')}</div>`);
+    const cites = (ctx.citations || []).map((c) =>
+      `<span class="cite">[${esc(c.chunk_id)}]<span class="q">&ldquo;${esc(c.quote || '')}&rdquo;${c.source ? ` — ${esc(c.source)}` : ''}</span></span>`).join('');
+    out.push(`<div style="margin-top:10px">${cites || '<span class="empty">no citations</span>'}</div>`);
+  }
+  out.push((r.notes || []).map((n) => `<div class="note">${esc(n)}</div>`).join(''));
+  $('move-out').innerHTML = out.join('');
+}
+
+async function explainMove(){
+  const t = $('mv-ticker').value.trim().toUpperCase();
+  const d = $('mv-date').value;
+  if (!/^[A-Z]{1,6}$/.test(t)) { sys('enter a ticker (1-6 letters)'); return; }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { sys('pick a date'); return; }
+  const btn = $('btn-move');
+  btn.disabled = true;
+  sys(`$ signallab explain --ticker ${t} --date ${d}`);
+  $('move-out').innerHTML = empty('Crunching prices + news + 10-K context…');
+  try {
+    const r = await api(`/api/explain?ticker=${encodeURIComponent(t)}&date=${encodeURIComponent(d)}`);
+    renderMove(r);
+    sys(`explained ${r.ticker} @ ${r.date}: ${(r.drivers || []).length} driver(s)`);
+  } catch (e) {
+    $('move-out').innerHTML = empty('Explain failed: ' + e.message);
+    sys('explain failed: ' + e.message);
+  }
+  btn.disabled = false;
+}
+
 /* ---------- wire up ---------- */
 buildCards();
 $('btn-demo').addEventListener('click', runFullDemo);
 $('btn-explain').addEventListener('click', explainSelected);
+$('btn-move').addEventListener('click', explainMove);
+$('mv-ticker').addEventListener('keydown', (e) => { if (e.key === 'Enter') explainMove(); });
+$('mv-date').addEventListener('keydown', (e) => { if (e.key === 'Enter') explainMove(); });
 $('btn-seed').addEventListener('click', async ()=>{
   if (state.running) return;
   sys('$ signallab seed');
