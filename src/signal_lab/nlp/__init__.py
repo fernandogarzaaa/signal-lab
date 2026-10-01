@@ -34,7 +34,11 @@ FINANCE_WORDS = {
 }
 
 # Single-word aliases that are ambiguous outside finance context.
-AMBIGUOUS = {"apple", "meta", "amazon", "alphabet", "tesla", "nvidia", "exxon"}
+AMBIGUOUS = {
+    "apple", "meta", "amazon", "alphabet", "tesla", "nvidia", "exxon",
+    # Gate-2 universe additions (single common words; same finance-context rule).
+    "visa", "booking", "cat", "now", "ba", "usb", "hd", "pm",
+}
 
 
 def _load_aliases() -> list[tuple[str, str]]:
