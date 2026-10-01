@@ -240,3 +240,84 @@ def test_watchlist_snapshot_empty_state(tmp_store, monkeypatch):
     assert snap["tickers"] == list(monitor.UNIVERSE)
     assert snap["monitor"]["status"] == "never-polled"
     assert snap["prices"] == {}
+
+
+# ---------------------------------------------------------------------------
+# Feature-space adaptation (workstream 4): the scorer must build exactly
+# the feature matrix the loaded model was trained on.
+# ---------------------------------------------------------------------------
+
+def _fake_scorer(n_features, tmp_path):
+    """A tiny fake (vectorizer, model) pair with a controlled feature count."""
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    import numpy as np
+
+    vec = TfidfVectorizer(max_features=10)
+    vec.fit(["apple earnings beat", "market flat today"])
+    n_tfidf = len(vec.vocabulary_)
+
+    class FakeModel:
+        n_features_in_ = n_features
+
+        def predict_proba(self, X):
+            assert X.shape[1] == n_features, (
+                f"feature mismatch: built {X.shape[1]}, model expects {n_features}"
+            )
+            return np.tile([0.4, 0.6], (X.shape[0], 1))
+
+    return vec, FakeModel(), "fake"
+
+
+def test_score_new_articles_adapts_to_pre_ctx_model(tmp_store, monkeypatch):
+    """A model trained without context features (5008-dim space) is scored
+    on TF-IDF+lexicon only: no 5015-dim crash."""
+    from signal_lab.models.lexicon import LEXICON_FEATURE_NAMES
+
+    vec, model, name = _fake_scorer(0, tmp_store)  # placeholder
+    n_base = len(vec.vocabulary_) + len(LEXICON_FEATURE_NAMES)
+    vec, model, name = _fake_scorer(n_base, tmp_store)
+    monkeypatch.setattr(monitor, "load_scorer", lambda: (vec, model, name))
+    monkeypatch.setattr(monitor, "_read_prices", lambda tickers: pd.DataFrame())
+    monkeypatch.setattr(
+        monitor, "build_context_features",
+        lambda df, prices, benchmark=None, log=print: pd.DataFrame(
+            {c: [float("nan")] for c in monitor.CONTEXT_FEATURE_NAMES},
+            index=df.index,
+        ),
+    )
+    items = [{
+        "title": "Apple earnings beat", "body_snippet": "",
+        "url": "http://x/1", "published_at": datetime.now(timezone.utc),
+    }]
+    # NaN ctx -> unscored path; use valid ctx to reach the scorer.
+    monkeypatch.setattr(
+        monitor, "build_context_features",
+        lambda df, prices, benchmark=None, log=print: pd.DataFrame(
+            {c: [0.0] for c in monitor.CONTEXT_FEATURE_NAMES},
+            index=df.index,
+        ),
+    )
+    out = monitor.score_new_articles(items, "AAPL", log=lambda *a, **k: None)
+    assert out["proba"].notna().all()
+    assert "without context features" in out["score_note"].iloc[0]
+
+
+def test_score_new_articles_rejects_unknown_feature_space(tmp_store, monkeypatch):
+    """A model expecting a feature count that is neither the base space
+    nor base+ctx fails loudly instead of scoring garbage."""
+    vec, model, name = _fake_scorer(12345, tmp_store)
+    monkeypatch.setattr(monitor, "load_scorer", lambda: (vec, model, name))
+    monkeypatch.setattr(monitor, "_read_prices", lambda tickers: pd.DataFrame())
+    monkeypatch.setattr(
+        monitor, "build_context_features",
+        lambda df, prices, benchmark=None, log=print: pd.DataFrame(
+            {c: [0.0] for c in monitor.CONTEXT_FEATURE_NAMES},
+            index=range(len(df)),
+        ),
+    )
+    items = [{
+        "title": "Apple earnings beat", "body_snippet": "",
+        "url": "http://x/1", "published_at": datetime.now(timezone.utc),
+    }]
+    with pytest.raises(ValueError, match="unknown feature space"):
+        monitor.score_new_articles(items, "AAPL", log=lambda *a, **k: None)

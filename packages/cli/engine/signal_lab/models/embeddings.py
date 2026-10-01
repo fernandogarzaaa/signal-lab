@@ -59,6 +59,18 @@ class FinbertUnavailableError(RuntimeError):
     """Raised when FinBERT embeddings are requested but unavailable."""
 
 
+class MissingEmbeddingError(RuntimeError):
+    """Raised when cached FinBERT embeddings are missing and no fallback
+    was explicitly requested.
+
+    The cache-only contract means a missing embedding is a data problem,
+    not a modeling choice: silently substituting a zero vector would let
+    a broken cache masquerade as a real result. Callers that genuinely
+    want the old zero-fill behavior must pass ``on_missing="zero"``
+    explicitly.
+    """
+
+
 def _import_torch():
     try:
         import torch
@@ -572,30 +584,62 @@ def finbert_ctx_matrix(
     dense_extra=None,
     cache_dir: str | Path | None = None,
     log=print,
+    on_missing: str = "raise",
 ) -> "np.ndarray | csr_matrix":
     """FinBERT (768-dim, cache-only) + dense context features.
 
     0.4.0: the walk-forward winner. Cache-only by design: never imports
-    torch/transformers, never downloads. Texts without a cached embedding
-    become zero vectors (count logged). ``dense_extra`` (e.g. the 7 market-
-    context features) is hstacked when provided, giving a sparse matrix;
-    without it the result is the dense (n, 768) embedding matrix.
+    torch/transformers, never downloads. ``on_missing`` controls the
+    missing-embedding policy:
+
+    - ``"raise"`` (default): raise :class:`MissingEmbeddingError` naming
+      how many texts missed and which cache directory was probed. Loud
+      failure: a broken or absent cache must never masquerade as data.
+    - ``"zero"``: explicitly-named fallback that substitutes zero vectors
+      for cache misses (logged loudly). Opt in deliberately, e.g. for
+      local experiments on a machine whose cache you have verified.
+
+    ``dense_extra`` (e.g. the 7 market-context features) is hstacked when
+    provided, giving a sparse matrix; without it the result is the dense
+    (n, 768) embedding matrix.
     """
+    if on_missing not in ("raise", "zero"):
+        raise ValueError(
+            f"on_missing must be 'raise' or 'zero', got {on_missing!r}"
+        )
     import numpy as np
 
     from signal_lab.models.novelty import load_embedding
 
+    cdir = Path(cache_dir) if cache_dir is not None else default_cache_dir()
     vecs = []
     missing = 0
     for t in texts:
         v = load_embedding(str(t), cache_dir=cache_dir)
         if v is None:
             missing += 1
+            if on_missing == "raise":
+                continue
             v = np.zeros(768, dtype=np.float32)
         vecs.append(v)
+    if missing and on_missing == "raise":
+        raise MissingEmbeddingError(
+            f"{missing}/{len(texts)} texts have no cached FinBERT embedding "
+            f"(cache dir: {cdir}). The embedding cache is machine-local "
+            f"(~/.cache/signal_lab/finbert or $SIGNAL_LAB_FINBERT_CACHE) and "
+            f"is not shipped with the package. Generate it with "
+            f"scripts/fill_finbert_cache.py on a machine with torch + "
+            f"transformers, or pass on_missing='zero' to explicitly accept "
+            f"zero-filled vectors."
+        )
     emb = np.stack(vecs)
-    log(f"[finbert] cache-only matrix: {emb.shape[0]} rows, "
-        f"{missing} zero-filled (no torch import, no download)")
+    if missing:
+        log(f"[finbert] cache-only matrix: {emb.shape[0]} rows, "
+            f"{missing} zero-filled (explicit on_missing='zero'; "
+            f"no torch import, no download)")
+    else:
+        log(f"[finbert] cache-only matrix: {emb.shape[0]} rows, "
+            f"0 missing (no torch import, no download)")
     if dense_extra is None:
         return emb
     from scipy.sparse import csr_matrix

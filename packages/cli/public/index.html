@@ -418,11 +418,16 @@ async function renderDiagnostics(){
       const agg = wf.aggregate||{};
       const ci = (agg.pr_auc&&agg.pr_auc.ci95)?`95% CI [${agg.pr_auc.ci95[0]}, ${agg.pr_auc.ci95[1]}]`:'';
       const repr = wf.representation ? ` · repr ${wf.representation}` : '';
+      const prov = wf.provenance||{};
+      const clf = prov.classifier ? ` · clf ${prov.classifier}` : (wf.classifier ? ` · clf ${wf.classifier}` : '');
+      const scheme = (prov.label_config&&prov.label_config.scheme) ? ` · labels ${prov.label_config.scheme}` : '';
+      const rev = prov.code_revision ? ` · rev ${prov.code_revision}${prov.working_tree_dirty?' (dirty)':''}` : '';
+      const runAt = prov.run_at ? ` · run ${String(prov.run_at).slice(0,10)}` : '';
       $('wftable-wrap').innerHTML =
-        `<table><tr><th>fold</th><th>test period</th><th>train/test</th><th>PR-AUC</th><th>F1</th></tr>`+
-        folds.map(f=>`<tr><td>${f.fold}</td><td>${(f.test_start||'').slice(0,10)} → ${(f.test_end||'').slice(0,10)}</td>`+
-          `<td>${f.n_train}/${f.n_test}</td><td>${f.pr_auc}</td><td>${f.f1}</td></tr>`).join('')+`</table>`+
-        `<div class="summary">mean PR-AUC ${agg.pr_auc?agg.pr_auc.mean:'?'} ± ${agg.pr_auc?agg.pr_auc.std:'?'} · ${ci}${repr}</div>`+
+        `<table><tr><th>fold</th><th>test period</th><th>train/test</th><th>PR-AUC</th><th>ROC-AUC</th><th>F1</th></tr>`+
+        folds.map(f=>`<tr><td>${f.fold}</td><td>${(f.test_start||'').slice(0,10)} → ${(f.test_end||'').slice(0,10)}`+
+          `</td><td>${f.n_train}/${f.n_test}</td><td>${f.pr_auc}</td><td>${f.roc_auc!=null?f.roc_auc:'-'}</td><td>${f.f1}</td></tr>`).join('')+`</table>`+
+        `<div class="summary">mean PR-AUC ${agg.pr_auc?agg.pr_auc.mean:'?'} ± ${agg.pr_auc?agg.pr_auc.std:'?'} · ${ci}${repr}${clf}${scheme}${rev}${runAt}</div>`+
         ((wf.skipped_folds||[]).map(s=>`<div class="empty">fold ${s.fold} skipped: ${s.reason}</div>`).join(''));
     } else { $('wftable-wrap').innerHTML = empty('No folds yet.'); }
   }catch(e){

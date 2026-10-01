@@ -19,8 +19,13 @@ poll cycle (every 15 min in the dashboard server, or on demand)
   3. refresh price context via yfinance (also feeds the price badges)
   4. attribute each article to a ticker (alias extractor; falls back to the
      queried ticker for tickers with no aliases on file)
-  5. score with the production model (TF-IDF + lexicon + 7 market-context
-     features, same feature space as training)
+  5. score with the production model: the scorer builds exactly the feature
+     space the loaded model was trained on (verified against
+     `model.n_features_in_`): TF-IDF + lexicon always, plus the 7
+     market-context features only when the model expects them. The shipped
+     `lightgbm_balanced` model was trained without context features, so it
+     scores on TF-IDF+lexicon (noted per row); any other feature count
+     raises loudly instead of scoring garbage.
   6. append to data/artifacts/monitor_scored.csv; write poll health to
      data/artifacts/monitor_state.json
 ```
