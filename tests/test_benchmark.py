@@ -72,6 +72,30 @@ def _trading_days(df):
     return np.sort(days.unique().astype(np.int64))
 
 
+_fb_cache_dirs: dict[tuple[str, ...], str] = {}
+
+
+def _fb_cache(texts) -> str:
+    """Fake FinBERT cache dir with synthetic 768-dim vectors for `texts`.
+
+    The benchmark's FinBERT arm is cache-only by design, so tests populate
+    a throwaway cache keyed exactly like the real one (no torch needed).
+    """
+    import tempfile
+
+    from signal_lab.models.embeddings import _cache_stem, cache_key
+
+    key = tuple(sorted({str(t) for t in texts}))
+    if key not in _fb_cache_dirs:
+        d = tempfile.mkdtemp(prefix="fb-test-")
+        rng = np.random.default_rng(1234)
+        for t in key:
+            vec = rng.normal(0, 1, 768).astype(np.float32)
+            np.save(f"{d}/{_cache_stem(cache_key(t))}.npy", vec)
+        _fb_cache_dirs[key] = d
+    return _fb_cache_dirs[key]
+
+
 def _fast_config(**kw):
     base = dict(
         n_splits=2,
@@ -156,19 +180,20 @@ def test_trading_days_required():
 def test_benchmark_runs_and_gate_present():
     df = _synthetic_df()
     res = run_benchmark(
-        df, _trading_days(df), label_cfg=_no_attention(), config=_fast_config()
+        df, _trading_days(df), label_cfg=_no_attention(), config=_fast_config(),
+        finbert_cache_dir=_fb_cache(df["text"]),
     )
     assert res["phase"] == 3
     assert res["n_folds_completed"] == 2
     assert res["gate"]["verdict"] in ("GO", "NO-GO")
     assert res["gate"]["test_period_touched"] is False
-    for variant in ("A", "B", "C"):
+    for variant in ("A", "B", "C", "Fb", "Fc"):
         assert "logreg_balanced" in res["aggregate"][variant]
         row = res["aggregate"][variant]["logreg_balanced"]["pr_auc"]
         assert 0.0 <= row["mean"] <= 1.0
     # naive model must sit exactly at the chance level per fold
     for f in res["folds"]:
-        for variant in ("A", "B", "C"):
+        for variant in ("A", "B", "C", "Fb", "Fc"):
             m = f["metrics"][variant]["naive"]
             assert m["pr_auc"] == pytest.approx(m["baseline_pr_auc"])
 
@@ -182,7 +207,8 @@ def test_shuffled_labels_near_chance():
     df["excess_3d"] = df["abn_ret"]
     df["direction_3d"] = (df["abn_ret"] > 0).astype(float)
     res = run_benchmark(
-        df, _trading_days(df), label_cfg=_no_attention(), config=_fast_config()
+        df, _trading_days(df), label_cfg=_no_attention(), config=_fast_config(),
+        finbert_cache_dir=_fb_cache(df["text"]),
     )
     for f in res["folds"]:
         base = f["metrics"]["C"]["naive"]["baseline_pr_auc"]
@@ -195,7 +221,8 @@ def test_future_leak_detected():
     variant A far above chance, proving the harness can see leakage."""
     df = _synthetic_df(seed=5, leak=True)
     res = run_benchmark(
-        df, _trading_days(df), label_cfg=_no_attention(), config=_fast_config()
+        df, _trading_days(df), label_cfg=_no_attention(), config=_fast_config(),
+        finbert_cache_dir=_fb_cache(df["text"]),
     )
     a = res["aggregate"]["A"]["logreg_balanced"]["pr_auc"]["mean"]
     assert a > 0.7, f"leak not detected: variant A pr_auc={a}"
@@ -207,7 +234,8 @@ def test_fold_test_indices_match_validation_framework():
     convention)."""
     df = _synthetic_df()
     res = run_benchmark(
-        df, _trading_days(df), label_cfg=_no_attention(), config=_fast_config()
+        df, _trading_days(df), label_cfg=_no_attention(), config=_fast_config(),
+        finbert_cache_dir=_fb_cache(df["text"]),
     )
     work = df.dropna(subset=["published_at", "t0", "t1", "abn_ret"]).reset_index(
         drop=True
@@ -239,7 +267,10 @@ def test_scaler_imputer_fit_on_train_only():
     dte.iloc[1, 3] = np.nan  # test NaN must be imputed, not crash
     texts_tr = pd.Series(["market news report"] * n_tr)
     texts_te = pd.Series(["market news report"] * n_te)
-    mats_tr, mats_te, _ = _build_matrices(texts_tr, texts_te, dtr, dte)
+    mats_tr, mats_te, _ = _build_matrices(
+        texts_tr, texts_te, dtr, dte,
+        finbert_cache_dir=_fb_cache(list(texts_tr) + list(texts_te)),
+    )
     got = mats_te["A"].toarray()
     assert np.isfinite(got).all()
     # column 0, row 0: (1e6 - train_median) / train_std
@@ -252,9 +283,10 @@ def test_scaler_imputer_fit_on_train_only():
 def test_determinism():
     df = _synthetic_df(seed=7)
     kw = dict(label_cfg=_no_attention(), config=_fast_config())
+    kw["finbert_cache_dir"] = _fb_cache(df["text"])
     r1 = run_benchmark(df, _trading_days(df), **kw)
     r2 = run_benchmark(df, _trading_days(df), **kw)
-    for v in ("A", "B", "C"):
+    for v in ("A", "B", "C", "Fb", "Fc"):
         a = r1["aggregate"][v]["logreg_balanced"]["pr_auc"]["mean"]
         b = r2["aggregate"][v]["logreg_balanced"]["pr_auc"]["mean"]
         assert a == b
@@ -270,7 +302,8 @@ def test_calibration_and_abstention_diagnostics():
         model_names=("logreg_balanced",),
     ).validated()
     df = _synthetic_df()
-    res = run_benchmark(df, _trading_days(df), label_cfg=_no_attention(), config=cfg)
+    res = run_benchmark(df, _trading_days(df), label_cfg=_no_attention(), config=cfg,
+                        finbert_cache_dir=_fb_cache(df["text"]))
     f0 = res["folds"][0]
     assert "calibration" in f0
     cal = f0["calibration"]

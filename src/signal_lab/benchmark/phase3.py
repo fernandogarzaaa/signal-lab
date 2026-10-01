@@ -83,12 +83,16 @@ except Exception:  # noqa: BLE001 - LightGBM optional; absence is loud, not sile
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ART = REPO_ROOT / "data" / "artifacts"
 
-VARIANTS = ("A", "B", "C")
+VARIANTS = ("A", "B", "C", "Fb", "Fc")
 VARIANT_DESCR = {
     "A": "price-only: scaled dense price/volume/market features",
     "B": "text-only: TF-IDF (5000, 1-2gram, sublinear) + 8 lexicon features",
     "C": "combined: TF-IDF + lexicon + scaled dense price features",
+    "Fb": "text-only: FinBERT 768-dim embeddings, StandardScaler fit on train per fold (no PCA)",
+    "Fc": "combined: FinBERT 768-dim (train-fit scaled) + scaled dense price features",
 }
+# Gate-2 primary comparison: FinBERT text+price vs price-only, paired per fold.
+PRIMARY_COMPARISON_GATE2 = "Fc-A"
 MODEL_NAMES = (
     "naive",
     "historical_rate",
@@ -116,6 +120,7 @@ class BenchmarkConfig:
     calibrate: bool = True
     abstain: bool = True
     min_calib_train: int = 40  # skip calibration below this train size
+    primary_comparison: str = "C-A"  # gate-2 uses PRIMARY_COMPARISON_GATE2 ("Fc-A")
 
     def validated(self) -> BenchmarkConfig:
         if self.n_splits < 2:
@@ -133,6 +138,12 @@ class BenchmarkConfig:
                 raise ValueError(f"unknown model {m!r}; expected one of {MODEL_NAMES}")
         if self.min_calib_train < 1:
             raise ValueError("min_calib_train must be >= 1")
+        parts = self.primary_comparison.split("-")
+        if len(parts) != 2 or any(p not in VARIANTS for p in parts):
+            raise ValueError(
+                f"unknown primary_comparison {self.primary_comparison!r}; "
+                f"expected '<variant>-<variant>' with variants in {VARIANTS}"
+            )
         return self
 
 
@@ -254,9 +265,15 @@ def _build_matrices(
     texts_te: pd.Series,
     dense_tr: pd.DataFrame,
     dense_te: pd.DataFrame,
+    finbert_cache_dir: str | Path | None = None,
 ) -> tuple[dict[str, csr_matrix], dict[str, csr_matrix], TfidfVectorizer]:
     """Variant feature matrices. TF-IDF is fit on train texts only; the
-    median imputer and standard scaler are fit on train dense rows only."""
+    median imputer and standard scaler are fit on train dense rows only.
+    FinBERT embeddings are cache-only (missing entries raise loudly via
+    ``finbert_ctx_matrix``); a separate StandardScaler is fit on the train
+    embeddings per fold. No PCA in the primary analysis."""
+    from signal_lab.models.embeddings import finbert_ctx_matrix
+
     vec = TfidfVectorizer(
         max_features=5000, ngram_range=(1, 2), stop_words="english", sublinear_tf=True
     )
@@ -276,15 +293,38 @@ def _build_matrices(
         raise ValueError("[phase3] non-finite values after impute+scale")
     s_tr, s_te = csr_matrix(dtr_s), csr_matrix(dte_s)
 
+    # finbert_ctx_matrix -> novelty.load_embedding requires a Path (not str).
+    fb_cache = Path(finbert_cache_dir) if finbert_cache_dir is not None else None
+    f_tr = np.asarray(
+        finbert_ctx_matrix(list(texts_tr), cache_dir=fb_cache,
+                           log=lambda *a: None),
+        dtype=float,
+    )
+    f_te = np.asarray(
+        finbert_ctx_matrix(list(texts_te), cache_dir=fb_cache,
+                           log=lambda *a: None),
+        dtype=float,
+    )
+    fsc = StandardScaler()
+    ftr_s = fsc.fit_transform(f_tr)
+    fte_s = fsc.transform(f_te)
+    if not (np.isfinite(ftr_s).all() and np.isfinite(fte_s).all()):
+        raise ValueError("[phase3] non-finite values after FinBERT scaling")
+    fb_tr, fb_te = csr_matrix(ftr_s), csr_matrix(fte_s)
+
     mats_tr = {
         "A": s_tr,
         "B": hstack([tf_tr, lex_tr], format="csr"),
         "C": hstack([tf_tr, lex_tr, s_tr], format="csr"),
+        "Fb": fb_tr,
+        "Fc": hstack([fb_tr, s_tr], format="csr"),
     }
     mats_te = {
         "A": s_te,
         "B": hstack([tf_te, lex_te], format="csr"),
         "C": hstack([tf_te, lex_te, s_te], format="csr"),
+        "Fb": fb_te,
+        "Fc": hstack([fb_te, s_te], format="csr"),
     }
     return mats_tr, mats_te, vec
 
@@ -442,15 +482,17 @@ def _abstention_eval(
     return out
 
 
-def gate_verdict(paired: dict) -> dict:
+def gate_verdict(paired: dict, primary_comparison: str = "C-A") -> dict:
     """Deterministic GO/NO-GO verdict from the pre-specified rule.
 
     Primary metric: mean PR-AUC across dev folds. Primary model:
-    logreg_balanced. Primary comparison: C - A paired per fold.
+    logreg_balanced. Primary comparison: ``primary_comparison`` paired per
+    fold (gate 1: "C-A" with the TF-IDF text arm; gate 2:
+    ``PRIMARY_COMPARISON_GATE2`` = "Fc-A" with the FinBERT text arm).
     GO iff the mean paired difference > 0 AND the lower bound of the
     two-sided 95% Student-t CI (4 df) > 0.
     """
-    prim = paired.get(PRIMARY_MODEL, {}).get("C-A/pr_auc", {})
+    prim = paired.get(PRIMARY_MODEL, {}).get(f"{primary_comparison}/pr_auc", {})
     mean_diff = float(prim.get("mean_diff", float("nan")))
     ci = prim.get("ci95", [float("nan"), float("nan")])
     go = bool(
@@ -458,10 +500,12 @@ def gate_verdict(paired: dict) -> dict:
     )
     return {
         "rule": (
-            "GO iff mean paired (C-A) PR-AUC difference > 0 AND the lower bound "
+            f"GO iff mean paired ({primary_comparison}) PR-AUC difference > 0 "
+            "AND the lower bound "
             "of the two-sided 95% Student-t CI (4 df) > 0; "
             f"primary model {PRIMARY_MODEL}, primary metric {PRIMARY_METRIC}"
         ),
+        "primary_comparison": primary_comparison,
         "primary_mean_diff": mean_diff,
         "primary_ci95": [float(ci[0]), float(ci[1])],
         "primary_t_pvalue": float(prim.get("t_pvalue", float("nan"))),
@@ -477,6 +521,7 @@ def run_benchmark(
     label_cfg: LabelConfig | None = None,
     config: BenchmarkConfig | None = None,
     log=print,
+    finbert_cache_dir: str | Path | None = None,
 ) -> dict:
     """Phase 3 benchmark on the development period. Returns a JSON-safe
     results dict; the go/no-go verdict lives under ``gate``.
@@ -568,6 +613,7 @@ def run_benchmark(
             work["text"].iloc[tei_k],
             work[PRICE_COLS].iloc[tri_eff],
             work[PRICE_COLS].iloc[tei_k],
+            finbert_cache_dir=finbert_cache_dir,
         )
         fitted = _fit_variant_models(
             mats_tr, ytr, sample_weight, config.seed, config.model_names, log=log
@@ -635,21 +681,19 @@ def run_benchmark(
             }
 
     paired: dict = {}
+    comparisons = (("C", "A"), ("C", "B"), ("Fc", "A"), ("Fc", "Fb"))
     for name in config.model_names:
         if name not in fold_rows[0]["metrics"]["C"]:
             continue
         paired[name] = {}
         for m in ("pr_auc", "roc_auc", "brier", "f1"):
-            paired[name][f"C-A/{m}"] = _paired_test(
-                [f["metrics"]["C"][name][m] for f in fold_rows],
-                [f["metrics"]["A"][name][m] for f in fold_rows],
-            )
-            paired[name][f"C-B/{m}"] = _paired_test(
-                [f["metrics"]["C"][name][m] for f in fold_rows],
-                [f["metrics"]["B"][name][m] for f in fold_rows],
-            )
+            for v_hi, v_lo in comparisons:
+                paired[name][f"{v_hi}-{v_lo}/{m}"] = _paired_test(
+                    [f["metrics"][v_hi][name][m] for f in fold_rows],
+                    [f["metrics"][v_lo][name][m] for f in fold_rows],
+                )
 
-    gate = gate_verdict(paired)
+    gate = gate_verdict(paired, primary_comparison=config.primary_comparison)
 
     results = {
         "phase": 3,
@@ -663,6 +707,7 @@ def run_benchmark(
             "dedupe_policy": config.dedupe_policy,
             "seed": config.seed,
             "model_names": list(config.model_names),
+            "primary_comparison": config.primary_comparison,
         },
         "label_config": {
             "window_days": label_cfg.window_days,
