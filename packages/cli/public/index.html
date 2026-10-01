@@ -160,6 +160,15 @@
     </div>
     <div id="move-out"><div class="empty">Pick a ticker and a date to see the price move, the news drivers, and cited 10-K context.</div></div>
   </div>
+
+  <h2 style="margin-top:32px">Historical analogues <span style="text-transform:none;letter-spacing:0">(similar past news days + what happened next)</span></h2>
+  <div class="panel">
+    <div class="rag-controls">
+      <button id="btn-analogues" class="primary">Find similar past days</button>
+      <span class="dim">uses the ticker + date above · descriptive only, not a forecast</span>
+    </div>
+    <div id="analogues-out"><div class="empty">Finds past news days with a similar move size, news sentiment and news volume, and shows the forward returns that followed.</div></div>
+  </div>
 </main>
 
 <footer>signallab · the browser is the CLI · stages never fake results: failures surface here</footer>
@@ -566,11 +575,70 @@ async function explainMove(){
   btn.disabled = false;
 }
 
+/* ---------- historical analogues (workstream 2) ---------- */
+function renderAnalogues(r){
+  const pct = (v) => (v == null ? 'n/a' : `${(v * 100).toFixed(2)}%`);
+  const q = r.query || {};
+  const out = [];
+  out.push(`<div class="stats">` +
+    `<div class="stat"><div class="v">${q.n_articles ?? 'n/a'}</div><div class="l">articles in window</div></div>` +
+    `<div class="stat"><div class="v">${q.mean_proba == null ? 'n/a' : (q.mean_proba * 100).toFixed(1) + '%'}</div><div class="l">mean P(positive)</div></div>` +
+    `<div class="stat"><div class="v">${q.abnormal_z == null ? 'n/a' : q.abnormal_z.toFixed(2)}</div><div class="l">abnormal z (60d)</div></div>` +
+    `<div class="stat"><div class="v">${pct(q.ret_1d)}</div><div class="l">1-day return ${esc(r.date || '')}</div></div>` +
+    `</div>`);
+  const rows = (r.analogues || []).map((a) => {
+    const f = a.forward || {};
+    const fwd = ['1d', '5d', '10d'].map((h) =>
+      `<td>${f[h] == null ? '<span class="dim">n/a</span>' : pct(f[h])}</td>`).join('');
+    return `<tr><td style="white-space:nowrap">${esc(a.date)}</td>` +
+      `<td>${a.distance.toFixed(2)}</td><td>${pct(a.ret_1d)}</td>` +
+      `<td>${a.n_articles}</td>${fwd}` +
+      `<td style="max-width:340px">${esc(a.headline || '')}</td></tr>`;
+  }).join('');
+  out.push(`<h3 style="margin:18px 0 10px;font-size:14px">Most similar past news days (${(r.analogues || []).length})</h3>`);
+  out.push(rows
+    ? `<div style="overflow-x:auto"><table><tr><th>date</th><th>distance</th><th>1d ret</th><th>articles</th><th>+1d</th><th>+5d</th><th>+10d</th><th>top headline</th></tr>${rows}</table></div>`
+    : empty('No past news days to compare against.'));
+  const hz = (r.summary && r.summary.horizons) || {};
+  const keys = Object.keys(hz);
+  if (keys.length) {
+    out.push(`<h3 style="margin:18px 0 10px;font-size:14px">What happened next (descriptive)</h3>`);
+    out.push(`<div style="overflow-x:auto"><table><tr><th>horizon</th><th>n</th><th>median</th><th>mean</th><th>% positive</th></tr>` +
+      keys.map((h) => { const s = hz[h];
+        return `<tr><td>+${esc(h)}</td><td>${s.n}</td><td>${pct(s.median)}</td><td>${pct(s.mean)}</td><td>${(s.frac_positive * 100).toFixed(0)}%</td></tr>`;
+      }).join('') + `</table></div>`);
+    out.push(`<div class="note">Descriptive only: forward returns after the ${r.summary.n} most similar past news days. This is not a forecast.</div>`);
+  }
+  out.push((r.notes || []).map((n) => `<div class="note">${esc(n)}</div>`).join(''));
+  $('analogues-out').innerHTML = out.join('');
+}
+
+async function findAnalogues(){
+  const t = $('mv-ticker').value.trim().toUpperCase();
+  const d = $('mv-date').value;
+  if (!/^[A-Z]{1,6}$/.test(t)) { sys('enter a ticker (1-6 letters)'); return; }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { sys('pick a date'); return; }
+  const btn = $('btn-analogues');
+  btn.disabled = true;
+  sys(`$ signallab analogues --ticker ${t} --date ${d}`);
+  $('analogues-out').innerHTML = empty('Scanning past news days…');
+  try {
+    const r = await api(`/api/analogues?ticker=${encodeURIComponent(t)}&date=${encodeURIComponent(d)}`);
+    renderAnalogues(r);
+    sys(`analogues for ${r.ticker} @ ${r.date}: ${(r.analogues || []).length} past day(s)`);
+  } catch (e) {
+    $('analogues-out').innerHTML = empty('Analogues failed: ' + e.message);
+    sys('analogues failed: ' + e.message);
+  }
+  btn.disabled = false;
+}
+
 /* ---------- wire up ---------- */
 buildCards();
 $('btn-demo').addEventListener('click', runFullDemo);
 $('btn-explain').addEventListener('click', explainSelected);
 $('btn-move').addEventListener('click', explainMove);
+$('btn-analogues').addEventListener('click', findAnalogues);
 $('mv-ticker').addEventListener('keydown', (e) => { if (e.key === 'Enter') explainMove(); });
 $('mv-date').addEventListener('keydown', (e) => { if (e.key === 'Enter') explainMove(); });
 $('btn-seed').addEventListener('click', async ()=>{

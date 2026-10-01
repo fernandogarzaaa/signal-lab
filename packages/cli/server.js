@@ -133,26 +133,31 @@ function createApp() {
     }
   });
 
-  // "Why did it move?" (workstream 1): evidence for a ticker/date.
-  // Spawns the venv python module with --json (stdout is ONLY the JSON
-  // object; logs go to stderr). Never fabricates: python failures surface
-  // the stderr tail with a 502.
-  app.get('/api/explain', (req, res) => {
+  // Evidence endpoints (workstreams 1-2): validate ticker/date/k, then spawn
+  // the venv engine module with --json (stdout is ONLY the JSON object;
+  // logs go to stderr). Never fabricates: python failures surface the
+  // stderr tail with a 502.
+  function evidenceParams(req, res) {
     const ticker = String(req.query.ticker || '').toUpperCase().trim();
     const date = String(req.query.date || '').trim();
     const k = Math.min(20, Math.max(1, parseInt(req.query.k || '5', 10) || 5));
     if (!/^[A-Z]{1,6}$/.test(ticker)) {
-      return res.status(400).json({ error: 'bad ticker: 1-6 letters (e.g. MSFT)' });
+      res.status(400).json({ error: 'bad ticker: 1-6 letters (e.g. MSFT)' });
+      return null;
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      return res.status(400).json({ error: 'bad date: use YYYY-MM-DD' });
+      res.status(400).json({ error: 'bad date: use YYYY-MM-DD' });
+      return null;
     }
     if (!venvExists()) {
-      return res.status(400).json({ error: 'engine not set up — run `signallab setup` first' });
+      res.status(400).json({ error: 'engine not set up — run `signallab setup` first' });
+      return null;
     }
-    const child = spawn(venvPython(),
-      ['-m', 'signal_lab.explain_move', '--ticker', ticker, '--date', date,
-       '--k', String(k), '--json'],
+    return { ticker, date, k };
+  }
+
+  function runEngineModule(res, module, extraArgs) {
+    const child = spawn(venvPython(), ['-m', module, ...extraArgs, '--json'],
       { cwd: PKG_ROOT, env: { ...process.env, PYTHONPATH: ENGINE_DIR } });
     let out = '', err = '';
     child.stdout.on('data', (d) => { out += d; });
@@ -162,14 +167,30 @@ function createApp() {
       if (code !== 0) {
         const tail = String(err).split('\n').map((l) => l.trim())
           .filter(Boolean).slice(-12).join('\n').slice(0, 2000);
-        return res.status(502).json({ error: `explainer exited with code ${code}`, detail: tail });
+        return res.status(502).json({ error: `${module} exited with code ${code}`, detail: tail });
       }
       try {
         res.json(JSON.parse(out));
       } catch (e) {
-        res.status(502).json({ error: 'explainer returned invalid JSON', detail: String(out).slice(0, 500) });
+        res.status(502).json({ error: `${module} returned invalid JSON`, detail: String(out).slice(0, 500) });
       }
     });
+  }
+
+  // "Why did it move?" (workstream 1): evidence for a ticker/date.
+  app.get('/api/explain', (req, res) => {
+    const p = evidenceParams(req, res);
+    if (!p) return;
+    runEngineModule(res, 'signal_lab.explain_move',
+      ['--ticker', p.ticker, '--date', p.date, '--k', String(p.k)]);
+  });
+
+  // Historical analogues (workstream 2): similar past news events + forward returns.
+  app.get('/api/analogues', (req, res) => {
+    const p = evidenceParams(req, res);
+    if (!p) return;
+    runEngineModule(res, 'signal_lab.analogues',
+      ['--ticker', p.ticker, '--date', p.date, '--k', String(p.k)]);
   });
 
   // Fallback to the dashboard for any other route.
