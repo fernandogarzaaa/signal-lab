@@ -42,3 +42,4 @@ and carry no predictive claims.
 |---|---|---|---|
 | APP-000 | 2026-10-01 | Program closure note | docs/PROGRAM_STATUS.md |
 | APP-001 | 2026-10-01 | Split-conformal abstention (src/signal_lab/models/conformal.py): rolling-window calibration per fold, abstain on empty/non-singleton sets; replaces failed ad-hoc margins | tests/test_conformal.py (10 tests) |
+| APP-002 | 2026-10-01 | CAR significance tests (src/signal_lab/stats/car_tests.py): BMP / adj-BMP (Kolari-Pynnonen) / GRANK wired into event_study; near-zero-variance estimation windows dropped, not zero-filled | tests/test_car_tests.py (12 tests) |
