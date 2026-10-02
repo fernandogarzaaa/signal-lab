@@ -315,16 +315,25 @@ def cmd_evaluate(args) -> None:
 
     # DSR honesty metric (reported, not a gate): per-row MSE gains of
     # the challenger over the constant as pseudo-returns, freq=1,
-    # pooled dev selected test rows.
+    # pooled dev selected test rows. CONFMAG is a one-arm gating test
+    # (no model search), so fewer than 2 variants were tried and the
+    # DSR's selection-bias correction is vacuous: skip it and record
+    # the deviation instead of crashing.
     dsr_report = None
+    dsr_note = None
     if se_frames:
         loss_df = pd.concat(se_frames, ignore_index=True)
-        dsr_report = dsr_mod.dsr_report(
-            {"challenger": (loss_df["constant"].to_numpy()
-                            - loss_df["challenger"].to_numpy())},
-            freq=1)
-        _log("[evaluate] DSR report (reported, not a gate):")
-        _log(dsr_report.to_string(index=False))
+        try:
+            dsr_report = dsr_mod.dsr_report(
+                {"challenger": (loss_df["constant"].to_numpy()
+                                - loss_df["challenger"].to_numpy())},
+                freq=1)
+            _log("[evaluate] DSR report (reported, not a gate):")
+            _log(dsr_report.to_string(index=False))
+        except ValueError as exc:
+            dsr_note = (f"DSR skipped: {exc}; single-variant campaign, "
+                        "no selection bias to deflate")
+            _log(f"[evaluate] {dsr_note}")
 
     results = {
         "challenger": "lgbm_gated",
@@ -351,7 +360,7 @@ def cmd_evaluate(args) -> None:
         "dev_rows": len(dev),
         "dev_rows_after_nan_drop": len(clean),
         "n_nan_feature_rows_dropped": int(n_dropped),
-        "deviations": [],
+        "deviations": ([dsr_note] if dsr_note else []),
         "created_utc": datetime.now(timezone.utc).isoformat(),
     }
     RESULTS_JSON.write_text(json.dumps(results, indent=2, default=str))
