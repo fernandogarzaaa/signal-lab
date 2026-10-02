@@ -14,6 +14,16 @@ market already prices.
 
 Fallbacks (counted, never hidden):
 - beta estimation with < 60 observations: beta = 1.0 (raw VIX).
+- non-positive trailing beta (the market-model translation is
+  uninformative): beta = 1.0 (raw VIX). DEVIATION from the
+  pre-registration's literal text (which specified only the <60-obs
+  fallback): a negative beta makes the forecast negative, and the
+  1e-6 positivity floor then turns it into a degenerate near-zero
+  forecast that QLIKE punishes astronomically, crippling the baseline
+  by construction. The pre-reg already establishes beta = 1.0 as the
+  fallback for uninformative beta estimates; this extends that rule.
+  Logged under Deviations in the results doc; the first evaluation
+  run (literal floor, degenerate) is VOID.
 - missing VIX close at t0: most recent prior trading day's close.
 Forecasts are floored at 1e-6 (QLIKE needs strictly positive variance
 forecasts; the floor is an interface guard, never binding on real data).
@@ -72,6 +82,11 @@ def forecast_iv_proxy(rows: pd.DataFrame,
         t0 = pd.Timestamp(row["t0"]).date()
         upos = pos_of[t0.toordinal()]
         beta, fb = feat_mod.trailing_beta(aligned[t], spy_r, upos)
+        if beta <= 0:
+            # Non-positive trailing beta: the market-model translation is
+            # uninformative, so fall back to the raw index forecast
+            # (beta = 1.0), counted. See module docstring (deviation).
+            beta, fb = 1.0, True
         n_beta_fallback += int(fb)
         vix_close, _, vfb = vix_mod.vix_at(t0, vix)
         n_vix_fallback += int(vfb)

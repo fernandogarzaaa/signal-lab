@@ -152,3 +152,20 @@ def test_dev_and_test_frame_periods():
     bad.loc[0, "t0"] = pd.Timestamp("2026-09-15").date()
     with pytest.raises(ConfirmationLeakError):
         earn_mod.dev_frame(bad)
+
+
+def test_event_past_calendar_end_dropped_not_raised():
+    prices = _synthetic_prices()
+    last_trading = pd.bdate_range(START, periods=N_DAYS)[-1]
+    d_inside = pd.bdate_range(START, periods=N_DAYS)[10]
+    d_past = last_trading + pd.offsets.BDay(3)
+    rows = [
+        _earnings_row("AAA", d_inside + pd.Timedelta(hours=16)),
+        _earnings_row("AAA", d_past + pd.Timedelta(hours=16)),
+    ]
+    logged = []
+    frame = earn_mod.build_event_frame(pd.DataFrame(rows), prices,
+                                       log=logged.append)
+    assert len(frame) == 1
+    assert frame.iloc[0]["t0"] == d_inside.date()
+    assert any("past the price calendar end" in m for m in logged)

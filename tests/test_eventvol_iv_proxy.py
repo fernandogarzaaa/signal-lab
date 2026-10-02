@@ -93,3 +93,29 @@ def test_iv_proxy_missing_market_leg_raises():
     with pytest.raises(ValueError, match="market leg"):
         iv_mod.forecast_iv_proxy(_rows(dates), prices, vix,
                                  log=lambda *a: None)
+
+
+def test_iv_proxy_nonpositive_beta_falls_back_to_one():
+    # A negatively-correlated stock gets beta = 1.0 (raw VIX), counted,
+    # never a degenerate floored forecast (deviation from the literal
+    # pre-reg text; see iv_proxy module docstring).
+    dates = pd.bdate_range(START, periods=N_DAYS)
+    rng = np.random.default_rng(7)
+    spy_rets = rng.normal(0.0005, 0.008, N_DAYS)
+    stock_rets = -1.5 * spy_rets + rng.normal(0, 0.002, N_DAYS)
+    rows = []
+    for t, rets in (("AAA", stock_rets), ("SPY", spy_rets)):
+        close = 100.0 * np.exp(np.cumsum(rets))
+        for d, c in zip(dates, close):
+            rows.append({"ticker": t, "date": d, "open": c, "high": c,
+                         "low": c, "adj_close": c, "volume": 1_000_000})
+    prices = pd.DataFrame(rows)
+    vix = pd.DataFrame({"date": dates,
+                        "vix": np.full(N_DAYS, 20.0),
+                        "vix3m": np.full(N_DAYS, 21.0)})
+    erows = pd.DataFrame([{"ticker": "AAA", "t0": dates[300].date()}])
+    fc, counts = iv_mod.forecast_iv_proxy(erows, prices, vix,
+                                          log=lambda *a: None)
+    assert counts["n_beta_fallback"] == 1
+    assert fc[0] == pytest.approx(20.0 / 100.0 / np.sqrt(252))
+    assert fc[0] > 0.001  # sane market forecast, not the 1e-6 floor
