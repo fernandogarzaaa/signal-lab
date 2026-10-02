@@ -207,3 +207,36 @@ touched.
 | DISPVOL-VERDICT | 2026-10-03 | **NO-GO. Campaign DEAD per the frozen kill criterion.** No test-period evaluation run (GO-gated). No confirmation data touched | docs/DISPVOL_NEGATIVE_RESULT.md |
 
 **Tested-experiment count: 39** (38 + DISPVOL-EVAL; DISPVOL-BUILD is infra, DISPVOL-VERDICT is the verdict).
+
+## ATTRVOL campaign (CONFIRMATORY, pre-registered 2026-10-02)
+
+BET 2 (SPECULATIVE) from docs/SYNTHESIS_BETS.md: attribution structure
+(driver concentration + price-path analogues) predicts post-event
+realized volatility. Pre-registration: docs/ATTRVOL_PREREGISTRATION.md
+(PR #70). Target: realized_vol_5d on trailing top-decile |abn_ret|
+event days (11,806 event rows; 11,688 dev). Challenger: har_vix_attr =
+ridge (alpha=1.0, standardized) on 34 frozen HAR+VIX features + 5
+frozen attribution features (driver_H, idio_share, ret_x_H from a
+two-leg market/idiosyncratic decomposition with trailing 252d beta;
+analogue_vol_mean/std from k=10 same-ticker z-scored 20-day
+price-path analogues, candidates s in [t0-500, t0-5]). Primary
+baseline: har_vix (same ridge, 34 features). Secondary baseline:
+garch11 (same scale-corrected implementation as VOL/HARVIX). Metric:
+QLIKE primary with HAC-equivalent SEs, DM test, 95% MCS (reported, not
+a gate); MSE/MAE secondary; DSR honesty metric (reported, not a gate).
+Validation: 5-fold expanding purged walk-forward on event rows, seed 7,
+min_train 50, purge j==k, 5-trading-day embargo. GO iff mean paired
+QLIKE differential (har_vix minus challenger) > 0 AND 95% t CI lower
+bound > 0; NO-GO kills the campaign. Universe: frozen
+data/universe_vol.csv (102 tickers). Prices: yfinance 2022-01-01..
+2026-07-15 (reused VOL download). VIX: ^VIX/^VIX3M reused from the
+HARVIX cache. No GDELT. Dev t0 <= 2026-06-30; test 2026-07-01..08-31
+(GO-gated); confirmation never touched.
+
+| ID | Date (UTC) | Item | Result pointer |
+|---|---|---|---|
+| ATTRVOL-BUILD | 2026-10-03 | Campaign build: `src/signal_lab/attrvol/` (frozen 5-feature attribution leg with point-in-time construction; strictly-trailing event quantile; decompose_event pure helper; analogue search with NaN-path exclusion; run_campaign CLI reusing the VOL/HARVIX harness: frame, features, garch, metrics, splits, periods, MCS, DSR); 13 synthetic tests (event detection, quantile math, decomposition math, repeated-pattern analogue recovery, analogue-minimum guard, point-in-time truncation, no-future-info, fail-loud guards, end-to-end walk-forward smoke, confirmation enforcement); one post-merge warning-suppression fix (numerically identical). No network in CI | PR #71; PR #72 |
+| ATTRVOL-EVAL | 2026-10-03 | Dev evaluation (VALID): 5-fold expanding purged walk-forward on 11,688 dev event rows (0 NaN-feature rows dropped; 0 beta fallbacks; 114 GARCH fallbacks / 9,733 test rows). Per-fold d = QLIKE(har_vix)-QLIKE(har_vix_attr): -0.095936, -0.454547, -0.028008, -0.094570, -0.040713. mean(d) = -0.142755, se = 0.079154, 95% t CI (df=4) [-0.362522, +0.077012]. DM stat -1.8035, p = 0.1456. Fold 2 blows up BOTH ridge arms (QLIKE ~49.5 vs ~49.1): ridge extrapolation pathology on event days, not caused by the attribution features. Ex-fold-2 mean(d) = -0.064807, 95% CI [-0.121361, -0.008253], entirely negative: the attribution features make the forecast significantly worse, not just no better. Secondary vs garch11: mean(d2) = -9.857668, CI [-36.920115, +17.204779], DM p = 0.3691. 95% MCS: sole survivor garch11; har_vix_attr eliminated first (p=0.0002), then har_vix, then naive. DSR: both ridge arms likely_false_discovery = True. No deviations from the pre-registration -> **NO-GO** | docs/ATTRVOL_NEGATIVE_RESULT.md; docs/attrvol_results.json |
+| ATTRVOL-VERDICT | 2026-10-03 | **NO-GO. Campaign DEAD per the frozen kill criterion.** No test-period evaluation run (GO-gated). No confirmation data touched | docs/ATTRVOL_NEGATIVE_RESULT.md |
+
+**Tested-experiment count: 40** (39 + ATTRVOL-EVAL; ATTRVOL-BUILD is infra, ATTRVOL-VERDICT is the verdict).

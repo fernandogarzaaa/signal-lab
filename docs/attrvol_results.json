@@ -1,0 +1,210 @@
+{
+  "challenger": "har_vix_attr",
+  "primary_baseline": "har_vix",
+  "secondary_baseline": "garch11",
+  "folds": [
+    {
+      "fold": 1,
+      "test_start": "2023-03-15",
+      "test_end": "2024-02-07",
+      "n_train": 1902,
+      "n_test": 1942,
+      "n_purged": 53,
+      "n_embargoed": 0,
+      "qlike_har_vix_attr": 0.7016773430496905,
+      "qlike_har_vix": 0.6057410770452425,
+      "qlike_garch11": 0.5530448521484687,
+      "qlike_naive": 0.82179900377675,
+      "mse_var_har_vix_attr": 2.855974102372915e-07,
+      "mse_var_har_vix": 3.7085578522113096e-07,
+      "mse_var_garch11": 3.647083039033375e-07,
+      "mae_vol_har_vix_attr": 0.005919473279760083,
+      "mae_vol_har_vix": 0.006040704802396925,
+      "mae_vol_garch11": 0.007355526395987676,
+      "d": -0.09593626600444805,
+      "d_vs_garch": -0.14863249090122188
+    },
+    {
+      "fold": 2,
+      "test_start": "2024-02-08",
+      "test_end": "2024-09-11",
+      "n_train": 3828,
+      "n_test": 1955,
+      "n_purged": 69,
+      "n_embargoed": 0,
+      "qlike_har_vix_attr": 49.543414238063974,
+      "qlike_har_vix": 49.08886719265896,
+      "qlike_garch11": 0.6974570346928834,
+      "qlike_naive": 1.1884288334056325,
+      "mse_var_har_vix_attr": 1.1900390047369374e-06,
+      "mse_var_har_vix": 1.1832834925615263e-06,
+      "mse_var_garch11": 3.749670831587079e-06,
+      "mae_vol_har_vix_attr": 0.007324158365673908,
+      "mae_vol_har_vix": 0.007249730706390715,
+      "mae_vol_garch11": 0.007802998125430754,
+      "d": -0.45454704540501467,
+      "d_vs_garch": -48.84595720337109
+    },
+    {
+      "fold": 3,
+      "test_start": "2024-09-12",
+      "test_end": "2025-04-09",
+      "n_train": 5724,
+      "n_test": 1978,
+      "n_purged": 77,
+      "n_embargoed": 51,
+      "qlike_har_vix_attr": 0.8354668161914149,
+      "qlike_har_vix": 0.807458453086764,
+      "qlike_garch11": 0.8759897023228777,
+      "qlike_naive": 1.217646895990975,
+      "mse_var_har_vix_attr": 2.034779135752327e-06,
+      "mse_var_har_vix": 2.0411015744226845e-06,
+      "mse_var_garch11": 2.8049902793578954e-06,
+      "mae_vol_har_vix_attr": 0.008865468195669489,
+      "mae_vol_har_vix": 0.009179635343395057,
+      "mae_vol_garch11": 0.010008386178865231,
+      "d": -0.028008363104650935,
+      "d_vs_garch": 0.04052288613146271
+    },
+    {
+      "fold": 4,
+      "test_start": "2025-04-10",
+      "test_end": "2026-01-22",
+      "n_train": 7537,
+      "n_test": 1916,
+      "n_purged": 205,
+      "n_embargoed": 88,
+      "qlike_har_vix_attr": 0.7071801071456574,
+      "qlike_har_vix": 0.6126101526333716,
+      "qlike_garch11": 0.5750063009441695,
+      "qlike_naive": 0.8997177194421303,
+      "mse_var_har_vix_attr": 1.935286546812339e-06,
+      "mse_var_har_vix": 1.8434381958167055e-06,
+      "mse_var_garch11": 1.9920453450470868e-06,
+      "mae_vol_har_vix_attr": 0.008168944996987951,
+      "mae_vol_har_vix": 0.008050576327222555,
+      "mae_vol_garch11": 0.009897755124108582,
+      "d": -0.09456995451228578,
+      "d_vs_garch": -0.1321738062014879
+    },
+    {
+      "fold": 5,
+      "test_start": "2026-01-23",
+      "test_end": "2026-06-30",
+      "n_train": 9530,
+      "n_test": 1942,
+      "n_purged": 58,
+      "n_embargoed": 158,
+      "qlike_har_vix_attr": 0.6921467484112364,
+      "qlike_har_vix": 0.6514334536829905,
+      "qlike_garch11": 0.49004805597071954,
+      "qlike_naive": 0.7834410793682642,
+      "mse_var_har_vix_attr": 1.4172918568957344e-06,
+      "mse_var_har_vix": 1.4481231964370828e-06,
+      "mse_var_garch11": 1.9506605384134753e-06,
+      "mae_vol_har_vix_attr": 0.008528739725938766,
+      "mae_vol_har_vix": 0.008642668032829167,
+      "mae_vol_garch11": 0.009202983244200474,
+      "d": -0.04071329472824581,
+      "d_vs_garch": -0.20209869244051681
+    }
+  ],
+  "d": [
+    -0.09593626600444805,
+    -0.45454704540501467,
+    -0.028008363104650935,
+    -0.09456995451228578,
+    -0.04071329472824581
+  ],
+  "d_vs_garch": [
+    -0.14863249090122188,
+    -48.84595720337109,
+    0.04052288613146271,
+    -0.1321738062014879,
+    -0.20209869244051681
+  ],
+  "ci95": {
+    "mean": -0.14275498475092904,
+    "se": 0.07915408149078654,
+    "df": 4.0,
+    "tcrit": 2.7764451051977934,
+    "lower": -0.3625219468624506,
+    "upper": 0.07701197736059251,
+    "n": 5.0
+  },
+  "ci95_vs_garch": {
+    "mean": -9.857667861356571,
+    "se": 9.747157288942333,
+    "df": 4.0,
+    "tcrit": 2.7764451051977934,
+    "lower": -36.92011500583351,
+    "upper": 17.204779283120363,
+    "n": 5.0
+  },
+  "diebold_mariano": {
+    "statistic": -1.8035075647684142,
+    "p_value": 0.14564282328500922,
+    "n": 5.0,
+    "mean": -0.14275498475092904,
+    "se": 0.07915408149078654
+  },
+  "diebold_mariano_vs_garch": {
+    "statistic": -1.01133772331135,
+    "p_value": 0.36906094902065184,
+    "n": 5.0,
+    "mean": -9.857667861356571,
+    "se": 9.747157288942333
+  },
+  "mcs": {
+    "survivors": [
+      "garch11"
+    ],
+    "eliminated": [
+      [
+        "har_vix_attr",
+        0.0001999600079984003
+      ],
+      [
+        "har_vix",
+        0.0001999600079984003
+      ],
+      [
+        "naive",
+        0.0001999600079984003
+      ]
+    ],
+    "mcs_p": {
+      "har_vix_attr": 0.0001999600079984003,
+      "har_vix": 0.0001999600079984003,
+      "garch11": 1.0,
+      "naive": 0.0001999600079984003
+    },
+    "n_rows": 9733,
+    "n_boot": 5000,
+    "alpha": 0.05,
+    "seed": 7
+  },
+  "dsr": [
+    {
+      "variant": "har_vix",
+      "sharpe": -0.013517139252876313,
+      "dsr": 0.0009106050520158599,
+      "likely_false_discovery": true
+    },
+    {
+      "variant": "har_vix_attr",
+      "sharpe": -0.013722322450322918,
+      "dsr": 0.0006329953023162399,
+      "likely_false_discovery": true
+    }
+  ],
+  "dsr_note": "per-row QLIKE gains of the tried arms over naive as pseudo-returns, freq=1, pooled dev event test rows; reported only, not a gate",
+  "verdict": "NO-GO",
+  "n_garch_fallbacks": 114,
+  "n_test_rows_total": 9733,
+  "dev_rows": 11688,
+  "dev_rows_after_nan_drop": 11688,
+  "n_nan_feature_rows_dropped": 0,
+  "deviations": [],
+  "created_utc": "2026-10-02T19:17:48.071656+00:00"
+}
