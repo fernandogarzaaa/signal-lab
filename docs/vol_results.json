@@ -1,0 +1,169 @@
+{
+  "champion": "lightgbm",
+  "selection": {
+    "champion": "lightgbm",
+    "validation_qlike": {
+      "ridge": 0.6084188022155754,
+      "lightgbm": 0.5900646602076968
+    },
+    "validation_rows": 22253,
+    "train_rows": 88419,
+    "n_purged": 595,
+    "valid_start": "2025-08-15",
+    "valid_end": "2026-06-30",
+    "n_nan_feature_rows_dropped": 2244,
+    "dev_rows": 113511,
+    "ridge_hyperparams": {
+      "alpha": 1.0
+    },
+    "lightgbm_hyperparams": {
+      "n_estimators": 300,
+      "learning_rate": 0.05,
+      "num_leaves": 31,
+      "min_child_samples": 100,
+      "feature_fraction": 0.8,
+      "bagging_fraction": 0.8,
+      "bagging_freq": 1,
+      "lambda_l2": 1.0,
+      "random_state": 7,
+      "verbose": -1
+    },
+    "dsr": [
+      {
+        "variant": "lightgbm",
+        "sharpe": 0.14660389008625077,
+        "dsr": 0.9999999999999993,
+        "likely_false_discovery": false
+      },
+      {
+        "variant": "ridge",
+        "sharpe": 0.14332525698172688,
+        "dsr": 0.9999999999999982,
+        "likely_false_discovery": false
+      }
+    ],
+    "dsr_note": "per-row QLIKE gains over naive as pseudo-returns, freq=1; reported only, not a gate",
+    "created_utc": "2026-10-02T07:20:05.423000+00:00"
+  },
+  "folds": [
+    {
+      "fold": 1,
+      "test_start": "2022-10-31",
+      "test_end": "2023-07-27",
+      "n_train": 18100,
+      "n_test": 18500,
+      "n_purged": 500,
+      "n_embargoed": 0,
+      "qlike_champion": 0.5465281355486694,
+      "qlike_garch11": 0.6961492750266792,
+      "qlike_naive": 1.5990772794610015,
+      "mse_var_champion": 3.698580659208673e-07,
+      "mse_var_garch11": 4.7014405139287027e-07,
+      "mae_vol_champion": 0.007912873892147097,
+      "mae_vol_garch11": 0.00785327969710992,
+      "d": 0.1496211394780098
+    },
+    {
+      "fold": 2,
+      "test_start": "2023-07-28",
+      "test_end": "2024-04-23",
+      "n_train": 36600,
+      "n_test": 18600,
+      "n_purged": 500,
+      "n_embargoed": 0,
+      "qlike_champion": 0.6137642456808932,
+      "qlike_garch11": 0.600372176034302,
+      "qlike_naive": 2.04167510375046,
+      "mse_var_champion": 4.845662263741443e-07,
+      "mse_var_garch11": 5.127013376371444e-07,
+      "mae_vol_champion": 0.005822047945270166,
+      "mae_vol_garch11": 0.006524176620708838,
+      "d": -0.01339206964659112
+    },
+    {
+      "fold": 3,
+      "test_start": "2024-04-24",
+      "test_end": "2025-01-15",
+      "n_train": 54700,
+      "n_test": 18480,
+      "n_purged": 500,
+      "n_embargoed": 500,
+      "qlike_champion": 0.6851826339355621,
+      "qlike_garch11": 0.6570604321816276,
+      "qlike_naive": 2.1729739015213205,
+      "mse_var_champion": 5.615574512820684e-07,
+      "mse_var_garch11": 8.533909155015447e-07,
+      "mae_vol_champion": 0.006701544285107654,
+      "mae_vol_garch11": 0.007146189456730543,
+      "d": -0.02812220175393454
+    },
+    {
+      "fold": 4,
+      "test_start": "2025-01-16",
+      "test_end": "2025-10-08",
+      "n_train": 72673,
+      "n_test": 18625,
+      "n_purged": 505,
+      "n_embargoed": 1002,
+      "qlike_champion": 0.7542439033781022,
+      "qlike_garch11": 0.7851989077404034,
+      "qlike_naive": 2.043785135651161,
+      "mse_var_champion": 1.3871836606809398e-06,
+      "mse_var_garch11": 1.6691184066728278e-06,
+      "mae_vol_champion": 0.007625269938223367,
+      "mae_vol_garch11": 0.009272850280033315,
+      "d": 0.03095500436230114
+    },
+    {
+      "fold": 5,
+      "test_start": "2025-10-09",
+      "test_end": "2026-06-30",
+      "n_train": 90788,
+      "n_test": 18462,
+      "n_purged": 510,
+      "n_embargoed": 1507,
+      "qlike_champion": 0.6008853397651395,
+      "qlike_garch11": 0.5193403999576964,
+      "qlike_naive": 1.759038980783886,
+      "mse_var_champion": 1.061681037096603e-06,
+      "mse_var_garch11": 1.115951693642232e-06,
+      "mae_vol_champion": 0.007490711687782738,
+      "mae_vol_garch11": 0.007927440610464062,
+      "d": -0.08154493980744304
+    }
+  ],
+  "d": [
+    0.1496211394780098,
+    -0.01339206964659112,
+    -0.02812220175393454,
+    0.03095500436230114,
+    -0.08154493980744304
+  ],
+  "ci95": {
+    "mean": 0.011503386526468451,
+    "se": 0.03892482571251226,
+    "df": 4.0,
+    "tcrit": 2.7764451051977934,
+    "lower": -0.09656925529371342,
+    "upper": 0.11957602834665033,
+    "n": 5.0
+  },
+  "diebold_mariano": {
+    "statistic": 0.2955282731753048,
+    "p_value": 0.7822963477400139,
+    "n": 5.0,
+    "mean": 0.011503386526468451,
+    "se": 0.03892482571251226
+  },
+  "verdict": "NO-GO",
+  "n_garch_fallbacks": 5166,
+  "n_test_rows_total": 92667,
+  "dev_rows": 113511,
+  "dev_rows_after_nan_drop": 111267,
+  "n_nan_feature_rows_dropped": 2244,
+  "deviations": [
+    "BASELINE SCALE (deviation from the pre-registration's literal text): docs/VOL_PREREGISTRATION.md writes the GARCH(1,1) forecast as the 5-day term-structure variances 'summed over h=1..5, square-rooted'. Taken literally that is sqrt(sum of 5 daily variances) = 5-day cumulative volatility, sqrt(5)~2.24x larger than the frozen target realized_vol_5d, which is defined (docs/TARGETS_AND_FEATURES.md v2.0, units 'decimal, daily') as the sample std (ddof=1) of daily log returns over (t0,t0+5]. The literal reading puts the baseline on the wrong scale by construction (even a perfect-shape forecast scores QLIKE~0.81 on scale alone; observed GARCH QLIKE was 1.2-1.4 vs champion 0.55-0.75), which would make the champion-vs-baseline comparison meaningless. Implemented instead: sqrt(mean of the 5 h-step variances), i.e. the term-structure forecast of expected daily variance over the window, square-rooted to the target's daily scale - the same scale as the naive arm (trailing realized_vol_5d). The first evaluation run used the literal sqrt(sum); its GO verdict is VOID and discarded - only the scale-corrected run below counts.",
+    "TEXT ARMS SKIPPED (Phase 4, exploratory): the GDELT DOC API probe (query '(\"Apple Inc. stock\" OR \"AAPL stock\") sourcelang:english' for 2026-06-01, run 2026-10-02T11:05:20Z) returned 0 articles without error, but the first substantive quarterly query ('(\"AAPL stock\") sourcelang:english', 2026-04-01..2026-06-30, attempted 2026-10-02~11:07Z) got HTTP 429 Too Many Requests on all 4 attempts (client backoff 15s/120s/120s) and raised gdelt_client.errors.RateLimitError - the same hard throttle as gate-2. No proxies or rate-limit evasion attempted. The TF-IDF + Loughran-McDonald text arms are not run in this campaign."
+  ],
+  "created_utc": "2026-10-02T11:03:41.486258+00:00"
+}
