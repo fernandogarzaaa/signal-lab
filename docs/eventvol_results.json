@@ -1,0 +1,196 @@
+{
+  "folds": [
+    {
+      "fold": 1,
+      "test_start": "2022-10-28",
+      "test_end": "2023-07-26",
+      "n_train": 259,
+      "n_test": 279,
+      "n_purged": 34,
+      "n_embargoed": 0,
+      "qlike_challenger": 0.6471052789500311,
+      "qlike_iv_proxy": 0.5337230182825535,
+      "qlike_garch11": 0.696816346165123,
+      "qlike_har_vix": 156.28804736827544,
+      "qlike_naive": 2.0456007956752704,
+      "mse_var_challenger": 1.9691111039109294e-06,
+      "mse_var_iv_proxy": 1.9067392600330461e-06,
+      "mae_vol_challenger": 0.009921841666948534,
+      "mae_vol_iv_proxy": 0.008240260892897857,
+      "d": -0.11338226066747759
+    },
+    {
+      "fold": 2,
+      "test_start": "2023-07-27",
+      "test_end": "2024-04-24",
+      "n_train": 544,
+      "n_test": 287,
+      "n_purged": 28,
+      "n_embargoed": 0,
+      "qlike_challenger": 0.8208932294322379,
+      "qlike_iv_proxy": 1.2239519818030915,
+      "qlike_garch11": 1.4479798401285247,
+      "qlike_har_vix": 1.3173858055898997,
+      "qlike_naive": 9.242406238553302,
+      "mse_var_challenger": 5.127642245736556e-06,
+      "mse_var_iv_proxy": 5.560512513050425e-06,
+      "mae_vol_challenger": 0.010293000168632294,
+      "mae_vol_iv_proxy": 0.010038425382012264,
+      "d": 0.40305875237085365
+    },
+    {
+      "fold": 3,
+      "test_start": "2024-04-25",
+      "test_end": "2025-01-27",
+      "n_train": 811,
+      "n_test": 284,
+      "n_purged": 25,
+      "n_embargoed": 23,
+      "qlike_challenger": 2.946098702221785,
+      "qlike_iv_proxy": 1.2170726059918588,
+      "qlike_garch11": 1.9202748893054669,
+      "qlike_har_vix": 121.96986091813044,
+      "qlike_naive": 5.330842377174142,
+      "mse_var_challenger": 4.1630667073319645e-06,
+      "mse_var_iv_proxy": 4.730167676075378e-06,
+      "mae_vol_challenger": 0.01115555903888987,
+      "mae_vol_iv_proxy": 0.01114190602853791,
+      "d": -1.729026096229926
+    },
+    {
+      "fold": 4,
+      "test_start": "2025-01-28",
+      "test_end": "2025-10-16",
+      "n_train": 1074,
+      "n_test": 285,
+      "n_purged": 16,
+      "n_embargoed": 53,
+      "qlike_challenger": 0.654630437761836,
+      "qlike_iv_proxy": 0.6946969106737803,
+      "qlike_garch11": 0.8585781275733654,
+      "qlike_har_vix": 411.7287642964529,
+      "qlike_naive": 5.124103657482657,
+      "mse_var_challenger": 2.430575782767391e-06,
+      "mse_var_iv_proxy": 2.640428309711941e-06,
+      "mae_vol_challenger": 0.010393261538292042,
+      "mae_vol_iv_proxy": 0.0089388594823343,
+      "d": 0.040066472911944206
+    },
+    {
+      "fold": 5,
+      "test_start": "2025-10-17",
+      "test_end": "2026-06-24",
+      "n_train": 1336,
+      "n_test": 286,
+      "n_purged": 12,
+      "n_embargoed": 80,
+      "qlike_challenger": 0.7989168439676935,
+      "qlike_iv_proxy": 0.9549092996056242,
+      "qlike_garch11": 0.9775923492224767,
+      "qlike_har_vix": 0.6517252415519094,
+      "qlike_naive": 2.5617332850665404,
+      "mse_var_challenger": 4.7208284885878466e-06,
+      "mse_var_iv_proxy": 5.10974253333016e-06,
+      "mae_vol_challenger": 0.011754153413906343,
+      "mae_vol_iv_proxy": 0.011370233612524101,
+      "d": 0.15599245563793074
+    }
+  ],
+  "d": [
+    -0.11338226066747759,
+    0.40305875237085365,
+    -1.729026096229926,
+    0.040066472911944206,
+    0.15599245563793074
+  ],
+  "ci95": {
+    "mean": -0.24865813519533503,
+    "se": 0.3795805424290319,
+    "df": 4.0,
+    "tcrit": 2.7764451051977934,
+    "lower": -1.302542674250744,
+    "upper": 0.805226403860074,
+    "n": 5.0
+  },
+  "diebold_mariano": {
+    "statistic": -0.6550866216801018,
+    "p_value": 0.5481725398830212,
+    "n": 5.0,
+    "mean": -0.24865813519533503,
+    "se": 0.3795805424290319
+  },
+  "mcs": {
+    "survivors": [
+      "challenger",
+      "iv_proxy"
+    ],
+    "eliminated": [
+      [
+        "har_vix",
+        0.02559488102379524
+      ],
+      [
+        "naive",
+        0.020195960807838434
+      ],
+      [
+        "garch11",
+        0.015996800639872025
+      ]
+    ],
+    "mcs_p": {
+      "challenger": 0.5966806638672265,
+      "iv_proxy": 0.5966806638672265,
+      "garch11": 0.015996800639872025,
+      "har_vix": 0.02559488102379524,
+      "naive": 0.020195960807838434
+    },
+    "n_rows": 1421,
+    "alpha": 0.05,
+    "n_boot": 5000
+  },
+  "challenger_in_mcs": true,
+  "verdict": "NO-GO",
+  "n_garch_fallbacks": 51,
+  "iv_proxy_fallbacks": {
+    "n_beta_fallback": 30,
+    "n_vix_fallback": 0,
+    "n_rows": 1421
+  },
+  "n_test_rows_total": 1421,
+  "dev_rows": 1874,
+  "dev_rows_after_nan_drop": 1714,
+  "n_nan_feature_rows_dropped": 160,
+  "dsr": [
+    {
+      "variant": "iv_proxy",
+      "sharpe": 0.08414766714000195,
+      "dsr": 0.8566542802327963,
+      "likely_false_discovery": true
+    },
+    {
+      "variant": "garch11",
+      "sharpe": 0.07930334333076026,
+      "dsr": 0.7974195531030337,
+      "likely_false_discovery": true
+    },
+    {
+      "variant": "challenger",
+      "sharpe": 0.0764696162084759,
+      "dsr": 0.7231827775911186,
+      "likely_false_discovery": true
+    },
+    {
+      "variant": "har_vix",
+      "sharpe": -0.051194495515283926,
+      "dsr": 3.419328343716014e-27,
+      "likely_false_discovery": true
+    }
+  ],
+  "dsr_note": "per-row QLIKE gains over naive as pseudo-returns, freq=1; reported only, not a gate",
+  "deviations": [
+    "IV-PROXY VARIANCE DECOMPOSITION (deviation from the pre-registration's literal text): docs/EVENTVOL_PREREGISTRATION.md wrote iv_proxy = beta x VIX/100/sqrt(252) with the beta = 1.0 fallback specified only for <60 trailing observations. Two problems made the literal baseline degenerate by construction. (1) A non-positive trailing beta makes the forecast negative, and the 1e-6 positivity floor then turns it into a degenerate near-zero forecast that QLIKE punishes astronomically (per-row QLIKE up to ~8.7e8 in the first voided run). (2) For low-beta stocks (utilities, staples: beta ~ 0.0-0.05) the literal formula prices only the systematic leg and underforecasts total volatility by an order of magnitude (second voided run: iv_proxy fold QLIKE 140-597 vs challenger 0.65-2.95). Implemented instead: iv_proxy = sqrt((beta x VIX_d)^2 + idio_var), the textbook market-model variance decomposition, with (beta, idio_var) from the trailing 252-day regression vs SPY; uninformative regressions (<60 obs, beta <= 0, non-finite, degenerate window) fall back to beta = 1.0, idio_var = 0 (raw VIX), counted. Rationale: the pre-reg's stated intent is 'the market's forward-looking vol forecast or the closest honest proxy'; the decomposition is that proxy, and beta = 1.0 was already the established fallback for uninformative beta estimates. The correction strengthens the baseline (it can only make GO harder). Both earlier evaluation runs are VOID and discarded; only this run counts.",
+    "EVENTS PAST THE PRICE CALENDAR END: the pre-registration freezes prices at 2022-01-01..2026-07-15 and drops rows with partial label windows. Earnings events dated past the last trading day cannot form any label window; they are dropped with a logged count (not a silent filter): build_event_frame drops them before t0 mapping. No test or confirmation rows are affected (the calendar ends 2026-07-15)."
+  ],
+  "created_utc": "2026-10-02T12:42:05.094658+00:00"
+}
