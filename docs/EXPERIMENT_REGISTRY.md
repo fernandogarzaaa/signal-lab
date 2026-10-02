@@ -51,12 +51,12 @@ components as of 2026-09-21) + SPY = 102 tickers, frozen in
 | ID | Date (UTC) | Item | Result pointer |
 |---|---|---|---|
 | VOL-BUILD | 2026-10-02 | Campaign build: `src/signal_lab/vol/` (universe, prices, frame, features, garch, models, metrics, run_campaign CLI); 7 synthetic test files; no network in CI | PR (pending) |
-| VOL-SELECT | — | Single purged train/validation split in dev: ridge vs LightGBM on validation QLIKE; DSR reported (not a gate) | pending |
-| VOL-EVAL | — | 5-fold walk-forward champion vs garch11 vs naive; frozen GO/NO-GO verdict | docs/VOL_RESULTS.md (pending) |
-| VOL-TEXT | — | One GDELT probe; text arms skipped if throttled (no evasion) | pending |
-| VOL-VERDICT | — | GO: single authorized test eval; NO-GO: docs/VOL_NEGATIVE_RESULT.md, campaign dead | pending |
+| VOL-SELECT | 2026-10-02 | Single purged train/validation split in dev (valid 2025-08-15..2026-06-30; 88,419 train / 22,253 valid rows; 595 purged): ridge validation QLIKE 0.608419 vs LightGBM 0.590065. Champion: **lightgbm**. DSR (per-row QLIKE gains over naive, freq=1; reported, not a gate): lightgbm Sharpe +0.147, DSR 1.0; ridge Sharpe +0.143, DSR 1.0; neither flagged likely_false_discovery | data/vol_selection.json (local) |
+| VOL-EVAL | 2026-10-02 | 5-fold expanding purged walk-forward (seed 7, min_train 50, purge j==k, 5d embargo), champion lightgbm vs garch11 vs naive, paired per fold on QLIKE. Per-fold d = QLIKE(garch)-QLIKE(champ): +0.149621, -0.013392, -0.028122, +0.030955, -0.081545. mean(d)=+0.011503, se=0.038925, 95% t CI (df=4) [-0.096569, +0.119576]. CI lower bound < 0 -> **NO-GO**. DM stat +0.2955, p=0.7823. GARCH fallbacks 5,166/92,667 (5.57%). Deviation: GARCH forecast uses sqrt(mean) not literal sqrt(sum) of the term structure (pre-reg literal puts the baseline on 5-day cumulative scale, 2.24x the daily-scale target; the literal-scale first run's GO is VOID) | docs/VOL_NEGATIVE_RESULT.md; docs/vol_results.json |
+| VOL-TEXT | 2026-10-02 | GDELT DOC probe 2026-10-02T11:05:20Z (single-day) returned 0 articles, no error; first quarterly query hit HTTP 429 on all 4 backoff attempts (RateLimitError, same hard throttle as gate-2). No evasion attempted; TF-IDF + Loughran-McDonald text arms SKIPPED, logged as deviation | this row; docs/VOL_NEGATIVE_RESULT.md |
+| VOL-VERDICT | 2026-10-02 | **NO-GO. Campaign DEAD per the frozen kill criterion.** No test-period evaluation run (GO-gated). No confirmation data touched. Next targets (event magnitude, drawdown risk) need separate pre-registrations | docs/VOL_NEGATIVE_RESULT.md |
 
-**Tested-experiment count: 31** (30 + VOL-BUILD).
+**Tested-experiment count: 33** (31 + VOL-SELECT + VOL-EVAL; VOL-TEXT skipped, VOL-VERDICT is the verdict).
 
 ## Extraction program (APPLIED product improvements, 2026-10-01)
 

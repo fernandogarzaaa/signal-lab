@@ -9,13 +9,13 @@ from signal_lab.vol.garch import GarchFit
 
 
 def _hand_forecast(omega, alpha, beta, sigma2_last, r_last, horizon=5):
-    """Independent longhand of the pre-registered term structure."""
+    """Independent longhand of the term structure (daily scale: sqrt of mean)."""
     sbar2 = omega / (1.0 - alpha - beta)
     s2_1 = omega + alpha * r_last ** 2 + beta * sigma2_last
     total = 0.0
     for h in range(1, horizon + 1):
         total += sbar2 + (alpha + beta) ** (h - 1) * (s2_1 - sbar2)
-    return total ** 0.5
+    return (total / horizon) ** 0.5
 
 
 def test_forecast_math_vs_hand_computation():
@@ -24,8 +24,8 @@ def test_forecast_math_vs_hand_computation():
     got = garch_mod.forecast_garch11(fit, r_last=0.01)
     expected = _hand_forecast(0.0001, 0.08, 0.88, 0.0004, 0.01)
     assert got == pytest.approx(expected, rel=1e-12)
-    # hand value: sbar2=0.0025, s2_1=0.00046, total=0.003084 -> ~0.0555
-    assert got == pytest.approx(0.05553, rel=1e-3)
+    # hand value: sbar2=0.0025, s2_1=0.00046, mean var=0.0006168 -> ~0.02484
+    assert got == pytest.approx(0.02484, rel=1e-3)
 
 
 def test_forecast_rejects_failed_fit():

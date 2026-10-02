@@ -42,6 +42,7 @@ PRICES_PARQUET = DATA_DIR / "vol_prices.parquet"
 FRAME_PARQUET = DATA_DIR / "vol_frame.parquet"
 CALENDAR_CSV = DATA_DIR / "vol_calendar.csv"
 SELECTION_JSON = DATA_DIR / "vol_selection.json"
+GARCH_PANEL_PARQUET = DATA_DIR / "vol_garch_panel.parquet"
 RESULTS_JSON = DOCS_DIR / "vol_results.json"
 RESULTS_MD = DOCS_DIR / "VOL_RESULTS.md"
 
@@ -244,7 +245,8 @@ def cmd_evaluate(args) -> None:
         [clean.iloc[s["test_idx"]][["ticker", "t0"]] for s in splits],
         ignore_index=True)
     garch_panel = garch_mod.forecast_panel(
-        test_rows, returns_by_ticker, n_jobs=args.jobs, log=_log)
+        test_rows, returns_by_ticker, n_jobs=args.jobs,
+        cache_path=GARCH_PANEL_PARQUET, log=_log)
     naive_vol = _naive_forecasts(test_rows, returns_by_ticker)
     n_fallbacks = int(garch_panel["garch_fallback"].sum())
 
@@ -424,7 +426,8 @@ def cmd_confirm_test_eval(args) -> None:
 
     test_rows = test_clean[["ticker", "t0"]].reset_index(drop=True)
     garch_panel = garch_mod.forecast_panel(
-        test_rows, returns_by_ticker, n_jobs=args.jobs, log=_log)
+        test_rows, returns_by_ticker, n_jobs=args.jobs,
+        cache_path=DATA_DIR / "vol_garch_panel_test.parquet", log=_log)
     naive_fc = _naive_forecasts(test_rows, returns_by_ticker)
 
     yt = test_clean["target"].to_numpy()
