@@ -106,3 +106,30 @@ data/universe_vol.csv. Prices: yfinance 2022-01-01..2026-07-15; VIX:
 | EVENTVOL-VERDICT | 2026-10-02 | **NO-GO. Campaign DEAD per the frozen kill criterion.** No test-period evaluation run (GO-gated; 0 labelable test rows in any case). No confirmation data touched | docs/EVENTVOL_NEGATIVE_RESULT.md |
 
 **Tested-experiment count: 36** (33 + EVENTVOL-EVAL-3; EVENTVOL-EVAL-1/2 voided, EVENTVOL-VERDICT is the verdict).
+
+## HARVIX campaign (CONFIRMATORY, pre-registered 2026-10-02)
+
+Pre-registration: `docs/HARVIX_PREREGISTRATION.md` (frozen, binding;
+merged as PR #61, commit 8d5b848). Candidate B from
+docs/RESEARCH_SPRINT.md section 4: HAR+VIX rematch on the frozen
+realized_vol_5d target, all ticker-days. Challenger: har_vix = ridge
+(alpha=1.0, standardized; frozen, no selection) on the 31 VOL HAR
+features + 3 frozen VIX features (vix_level, vix_5d_change, vix_slope;
+^VIX/^VIX3M downloaded from yfinance at build, 1,136 rows each).
+Primary baseline: garch11 (same scale-corrected implementation as VOL).
+Secondary baseline: har = ridge on the 31 HAR features alone. Metric:
+QLIKE primary with HAC-equivalent SEs, DM test, 95% MCS (reported, not
+a gate); MSE secondary. Validation: 5-fold expanding purged
+walk-forward, seed 7, min_train 50, purge j==k, 5-trading-day embargo.
+GO iff mean paired QLIKE differential (garch minus har_vix) > 0 AND 95%
+t CI lower bound > 0; NO-GO kills the campaign. Universe: frozen
+data/universe_vol.csv (102 tickers). Dev t0 <= 2026-06-30; test
+2026-07-01..2026-08-31 (GO-gated); confirmation never touched.
+
+| ID | Date (UTC) | Item | Result pointer |
+|---|---|---|---|
+| HARVIX-BUILD | 2026-10-02 | Campaign build: `src/signal_lab/harvix/` (frozen VIX feature leg, run_campaign CLI reusing the VOL harness: frame, features, garch, metrics, splits, periods; EVENTVOL MCS); 20 synthetic tests (VIX math/point-in-time/burn-in, ridge arms, end-to-end walk-forward smoke, confirmation enforcement); no network in CI | PR #62 |
+| HARVIX-EVAL | 2026-10-02 | Dev evaluation (VALID): 5-fold expanding purged walk-forward on 111,267 dev rows (2,244 NaN-feature rows dropped; 5,166 GARCH fallbacks / 92,667 test rows). GARCH panel memoized from VOL's cached panel: HARVIX's dev test-row set is exactly VOL's 92,667 (ticker, t0) rows, all joined values verified identical. Per-fold d = QLIKE(garch)-QLIKE(har_vix): +0.125595, -0.139821, -0.054134, -4.097733, -0.095399. mean(d) = -0.852298, se = 0.812610, 95% t CI (df=4) [-3.108466, +1.403869]. DM stat -1.0488, p = 0.3534. 95% MCS: survivors {har_vix, garch11, har}; naive eliminated (p=0.0002). Secondary har_vix vs har: mean(d2) = -0.840780, CI [-3.096260, +1.414701], DM p = 0.3591. DSR: har_vix likely_false_discovery = True. Fold-4 blowup (har_vix QLIKE 4.88): 2025-04-09 VIX +12.11 spike, ridge extrapolated to floored 1e-4 forecasts on defensive names; 8 rows carry ~4.15 of the 4.88 fold mean (genuine model pathology, same as EVENTVOL's har_vix note). Ex-fold-4 mean(d) = -0.040940, still negative -> **NO-GO** | docs/HARVIX_NEGATIVE_RESULT.md; docs/harvix_results.json |
+| HARVIX-VERDICT | 2026-10-02 | **NO-GO. Campaign DEAD per the frozen kill criterion.** No test-period evaluation run (GO-gated). No confirmation data touched | docs/HARVIX_NEGATIVE_RESULT.md |
+
+**Tested-experiment count: 37** (36 + HARVIX-EVAL; HARVIX-BUILD is infra, HARVIX-VERDICT is the verdict).
