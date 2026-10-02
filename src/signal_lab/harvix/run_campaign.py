@@ -150,8 +150,8 @@ def cmd_evaluate(args) -> None:
         n_test = len(s["test_idx"])
         sl = slice(offset, offset + n_test)
         fold_test = clean.iloc[s["test_idx"]]
-        y = fold_test["target"]
-        yt = y.to_numpy()
+        y = clean["target"]
+        yt = y.iloc[s["test_idx"]].to_numpy()
         train_idx = s["train_idx"]
 
         harvix_fc = _fit_predict_ridge(
