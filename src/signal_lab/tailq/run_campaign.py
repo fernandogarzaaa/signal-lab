@@ -29,6 +29,7 @@ import numpy as np
 import pandas as pd
 
 from signal_lab.eventvol.mcs import mcs
+from signal_lab.stats import deflated_sharpe as dsr_mod
 from signal_lab.tailq import caviar as caviar_mod
 from signal_lab.tailq import features as feat_mod
 from signal_lab.tailq import frame as frame_mod
@@ -82,6 +83,7 @@ def _forecast_row(ticker: str, t0, panels: dict) -> dict:
 def run_dev_eval(prices: pd.DataFrame,
                  events: pd.DataFrame,
                  vix: pd.DataFrame,
+                 pooled_cache: str | None = None,
                  log=print) -> dict:
     """Full dev walk-forward evaluation. Returns the verdict dict."""
     dev = frame_mod.dev_frame(events)
@@ -173,6 +175,24 @@ def run_dev_eval(prices: pd.DataFrame,
     caviar_fails_one = any(not v["pass"] for v in cov_cv.values())
     verdict = ("GO" if (pinball_wins and chall_passes_all and caviar_fails_one)
                else "NO-GO")
+
+    # DSR honesty metric (reported, not a gate): per-row pinball gains
+    # over naive as pseudo-returns, freq=1, over all evaluated arms.
+    gains = {
+        "lgbm_quantile": met.pinball(pooled_df["y"], pooled_df["q_naive"])
+                         - met.pinball(pooled_df["y"], pooled_df["q_challenger"]),
+        "caviar": met.pinball(pooled_df["y"], pooled_df["q_naive"])
+                  - met.pinball(pooled_df["y"], pooled_df["q_caviar"]),
+        "garch_hs": met.pinball(pooled_df["y"], pooled_df["q_naive"])
+                    - met.pinball(pooled_df["y"], pooled_df["q_garch_hs"]),
+    }
+    dsr_report = dsr_mod.dsr_report(
+        {k: np.asarray(v, dtype=float) for k, v in gains.items()}, freq=1)
+    if pooled_cache is not None:
+        Path(pooled_cache).parent.mkdir(parents=True, exist_ok=True)
+        pooled_df.to_parquet(pooled_cache, index=False)
+        log(f"[tailq] pooled forecasts -> {pooled_cache}")
+
     return {
         "verdict": verdict,
         "n_dev_rows": int(len(feat)),
@@ -186,6 +206,9 @@ def run_dev_eval(prices: pd.DataFrame,
         "coverage_challenger": cov_ch,
         "coverage_caviar": cov_cv,
         "mcs": mcs_res,
+        "dsr": dsr_report.to_dict("records"),
+        "dsr_note": ("per-row pinball gains over naive as pseudo-returns, "
+                     "freq=1; reported, not a gate"),
         "go_conjuncts": {
             "pinball_win": pinball_wins,
             "challenger_passes_all_coverage": chall_passes_all,
@@ -210,7 +233,7 @@ def main() -> None:
         force_download=args.force_download)
     events = frame_mod.build_tailq_frame(earnings, prices)
 
-    res = run_dev_eval(prices, events, vix)
+    res = run_dev_eval(prices, events, vix, pooled_cache="data/tailq_pooled.parquet")
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w") as f:
