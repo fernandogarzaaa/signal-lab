@@ -26,6 +26,8 @@ are dropped by the caller with a logged count (never filled).
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pandas as pd
 
@@ -120,8 +122,12 @@ def _zscored_paths(r_col: np.ndarray) -> np.ndarray:
         return paths
     view = np.lib.stride_tricks.sliding_window_view(r_col, _PATH_LEN)
     # view[p] covers r[p..p+19]; row p+19 of paths gets the path ending at p+19.
-    mu = np.nanmean(view, axis=1)
-    sd = np.nanstd(view, axis=1, ddof=1)
+    # All-NaN windows (e.g. pre-listing history) warn under nanmean/nanstd;
+    # they are expected and correctly masked invalid below, so silence them.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        mu = np.nanmean(view, axis=1)
+        sd = np.nanstd(view, axis=1, ddof=1)
     ok = np.isfinite(mu) & np.isfinite(sd) & (sd > 0) & np.isfinite(view).all(axis=1)
     z = (view - mu[:, None]) / np.where(sd[:, None] > 0, sd[:, None], np.nan)
     paths[_PATH_LEN - 1:] = np.where(ok[:, None], z, np.nan)
