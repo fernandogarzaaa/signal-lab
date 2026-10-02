@@ -276,7 +276,31 @@ def cmd_evaluate(args) -> None:
         "dsr": dsr_report.to_dict("records"),
         "dsr_note": ("per-row QLIKE gains over naive as pseudo-returns, "
                      "freq=1; reported only, not a gate"),
-        "deviations": [],
+        "deviations": [
+            "IV-PROXY NEGATIVE-BETA FALLBACK (deviation from the "
+            "pre-registration's literal text): docs/EVENTVOL_PREREGISTRATION.md "
+            "specifies the iv_proxy beta fallback only for <60 trailing "
+            "observations. A non-positive trailing beta makes the forecast "
+            "beta x VIX/100/sqrt(252) negative, and the 1e-6 positivity floor "
+            "then turns it into a degenerate near-zero forecast that QLIKE "
+            "punishes astronomically (per-row QLIKE up to ~8.7e8 observed in "
+            "the voided first run), crippling the primary baseline by "
+            "construction and making the GO/NO-GO comparison meaningless. "
+            "Implemented: non-positive trailing beta falls back to beta = 1.0 "
+            "(raw VIX forecast), counted in n_beta_fallback. Rationale: the "
+            "pre-reg already establishes beta = 1.0 as the fallback for "
+            "uninformative beta estimates; a negative beta is uninformative "
+            "for the market-model translation. The first evaluation run "
+            "(literal floor, degenerate iv_proxy) is VOID and discarded; only "
+            "this run counts.",
+            "EVENTS PAST THE PRICE CALENDAR END: the pre-registration freezes "
+            "prices at 2022-01-01..2026-07-15 and drops rows with partial "
+            "label windows. Earnings events dated past the last trading day "
+            "cannot form any label window; they are dropped with a logged "
+            "count (not a silent filter): build_event_frame drops them "
+            "before t0 mapping. No test or confirmation rows are affected "
+            "(the calendar ends 2026-07-15).",
+        ],
         "created_utc": datetime.now(timezone.utc).isoformat(),
     }
     RESULTS_JSON.write_text(json.dumps(results, indent=2, default=str))

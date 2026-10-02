@@ -110,6 +110,7 @@ def build_event_frame(earnings: pd.DataFrame,
     cal = pd.DatetimeIndex(sorted(prices["date"].unique()))
     trading_ordinals = np.array(
         sorted(d.date().toordinal() for d in cal), dtype=np.int64)
+    last_trading_date = cal.date.max()
 
     # Actuals only, latest timestamp wins per (ticker, date).
     df = earnings.copy()
@@ -117,6 +118,15 @@ def build_event_frame(earnings: pd.DataFrame,
     if len(df) == 0:
         raise DataQualityError("[earnings] zero actual (reported) rows")
     df["event_date"] = pd.to_datetime(df["earnings_ts"]).dt.date
+    # Events past the price calendar end cannot be labeled (their
+    # (t0, t0+5] window has no prices): drop and count, never fail.
+    # This also keeps test/confirmation-period events out of the frame,
+    # since the calendar ends 2026-07-15.
+    past_end = df["event_date"] > last_trading_date
+    if past_end.any():
+        log(f"[earnings] dropped {int(past_end.sum())} events past the "
+            f"price calendar end ({last_trading_date})")
+        df = df[~past_end].reset_index(drop=True)
     df = df.sort_values(["ticker", "event_date", "earnings_ts"])
     df = df.drop_duplicates(subset=["ticker", "event_date"], keep="last")
 
