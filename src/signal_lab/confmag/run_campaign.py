@@ -186,10 +186,12 @@ def _evaluate_fold(clean: pd.DataFrame, train_idx: np.ndarray,
         "d_garch": mse_garch - mse_chall,
         "mae_chall": float(np.mean(np.abs(ys - point_fc[selected]))),
         "mae_const": float(np.mean(np.abs(ys - const_fc))),
-        # Per-row squared errors on the selected subset (for MCS/DSR).
+        # Per-row squared errors on the selected subset (for MCS/DSR),
+        # plus the selected rows' t0s for the MCS day-block bootstrap.
         "se_chall": (ys - point_fc[selected]) ** 2,
         "se_const": (ys - const_fc) ** 2,
         "se_garch": (ys - garch_implied[selected]) ** 2,
+        "t0_selected": clean["t0"].iloc[test_idx].to_numpy()[selected],
     })
     return out
 
@@ -230,6 +232,7 @@ def cmd_evaluate(args) -> None:
     d_list: list[float] = []
     d_garch_list: list[float] = []
     se_frames: list[pd.DataFrame] = []
+    t0_selected_list: list[np.ndarray] = []
     offset = 0
     n_selected_total = 0
     n_test_total = 0
@@ -248,6 +251,7 @@ def cmd_evaluate(args) -> None:
                 "constant": fr["se_const"],
                 "garch_implied": fr["se_garch"],
             }))
+            t0_selected_list.append(fr["t0_selected"])
         fold_rows.append({
             "fold": s["fold"],
             "test_start": s["test_start"],
@@ -299,15 +303,12 @@ def cmd_evaluate(args) -> None:
          f"(guard [0.10, 0.40])")
     _log(f"[evaluate] verdict: {'GO' if go else 'NO-GO'}")
 
-    # 95% MCS (reported, not a gate) on selected-row squared errors.
+    # 95% MCS (reported, not a gate) on selected-row squared errors,
+    # with the actual selected rows' t0s for the day-block bootstrap.
     mcs_out = None
     if se_frames:
         loss_df = pd.concat(se_frames, ignore_index=True)
-        # Day-block bootstrap needs t0s; use a dummy daily index over the
-        # pooled selected rows (blocks are meaningless here; MCS is
-        # reported, not a gate).
-        t0_all = pd.to_datetime(np.arange(len(loss_df)), unit="D",
-                                origin="2020-01-01")
+        t0_all = pd.to_datetime(np.concatenate(t0_selected_list))
         mcs_out = mcs_mod.mcs(loss_df, t0_all, log=_log)
 
     # DSR honesty metric (reported, not a gate): per-row MSE gains of
