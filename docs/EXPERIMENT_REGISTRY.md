@@ -74,3 +74,29 @@ and carry no predictive claims.
 | APP-004 | 2026-10-02 | Fail-loud baseline/event-window leakage assertion (src/signal_lab/stats/leakage_guard.py; pattern from jiamingpan/agent-quant-research, reimplemented): BaselineLeakageError (AssertionError subclass, -O-safe) raised when any baseline label is on/after the event-window start. Wired into event_ar_panel (per-event panel check), _scar_frame (re-checks any hand-built panel before the estimation/event split), and explain_move._price_block (trailing 60-day abnormal-z baseline must end before the event day) | tests/test_leakage_guard.py (12 tests: guard unit incl. boundary, hostile panel through cross_sectional_tests, clean-path integration, explainer call shapes) |
 | APP-005 | 2026-10-02 | gdelt-client migration (src/signal_lab/ingest/gdelt_client.py, gdelt-client==0.2.2): hand-rolled GDELT DOC requests loop replaced by Filters/article_search; strict query-template parsing (unknown templates fail loudly), same day bounds (start-of-day..end-of-day) and max_records semantics, tenacity retries on 429/5xx with the old backoff posture (15s base, 120s cap). Code health only, not a throttle fix; checkpointing (fetch_log), politeness sleeps, and explicit gap logging unchanged. Documented deviation: no sort=datedesc (client exposes no sort param; ordering unused downstream) | tests/test_gdelt_client.py (10 tests: template-to-Filters mapping, loud rejection of unknown queries, row mapping, empty/URL-less rows, snippet fn, RateLimitError propagation, backoff config, fetch_log error bookkeeping) |
 | APP-006 | 2026-10-02 | purgedcv cross-check + Deflated Sharpe Ratio (reference: eslazarev/purged-cross-validation v0.1.10, commit aee1215; reference only, not a dependency; our harness stays canonical). Cross-check findings: (1) inverted label windows (t1 < t0) now rejected fail-loud in make_splits/single_purged_split/purge_against (gap vs purgedcv validate_times); (2) purge boundary documented as conservative: t1 == test_start is purged, stricter than purgedcv's half-open reference which keeps it; (3) embargo zones running past the trading-calendar end are skipped, not crashed. Added 5 edge-case tests incl. a randomized conservativeness check (no kept row is one the half-open reference would purge). DSR (src/signal_lab/stats/deflated_sharpe.py, Bailey & Lopez de Prado 2014): sharpe_ratio / expected_sharpe_null / deflated_sharpe_ratio / dsr_report (Sharpe, DSR, likely_false_discovery flag); reported, not a gate | tests/test_validation_splits.py (+5 cross-check tests); tests/test_deflated_sharpe.py (10 tests: stdlib-verified formula, zero-variance SR_0, DSR bounds/monotonicity in N, report sorting/flags, loud errors) |
+
+## EVENTVOL campaign (CONFIRMATORY, pre-registered 2026-10-02)
+
+Pre-registration: `docs/EVENTVOL_PREREGISTRATION.md` (frozen, binding;
+merged as PR #56, commit e11daf2). Target: realized_vol_5d (sample std
+ddof=1 of daily log returns over (t0, t0+5], decimal, daily) on
+earnings-event rows. Primary baseline: iv_proxy = beta(i,t0) x
+VIX(t0)/100/sqrt(252) (the market's forward-looking forecast; per-stock
+historical IV is not obtainable from yfinance, reformulated honestly as
+a deliberate design choice). Secondary baselines: garch11
+(scale-corrected 5-day term structure), har_vix (ridge alpha=1.0 on
+HAR+VIX features). Challenger: LightGBM (VOL frozen hyperparams) on
+HAR+VIX+event features (Ederington-Lee cycle proxies). Metric: QLIKE
+primary; Diebold-Mariano secondary. Validation: 5-fold expanding purged
+walk-forward, seed 7, min_train 50, 5-trading-day embargo. GO iff mean
+paired QLIKE differential (iv_proxy minus challenger) > 0 AND 95% t CI
+lower bound > 0 AND challenger survives the 95% MCS (Hansen-Lunde-Nason
+T_R, day-block stationary bootstrap, B=5000). Universe: frozen
+data/universe_vol.csv. Prices: yfinance 2022-01-01..2026-07-15; VIX:
+^VIX/^VIX3M same window; earnings: yfinance earnings calendar
+(actuals only). Dev t0 <= 2026-06-30; test 2026-07-01..2026-08-31
+(GO-gated); confirmation never touched.
+
+| ID | Date (UTC) | Item | Result pointer |
+|---|---|---|---|
+| EVENTVOL-BUILD | 2026-10-02 | Campaign build: `src/signal_lab/eventvol/` (earnings, vix, features, iv_proxy, mcs, run_campaign CLI); 5 synthetic test files (31 tests: event frame, point-in-time truncation, iv_proxy math/fallbacks, MCS elimination/determinism, splits invariants); no network in CI | PR (pending) |
