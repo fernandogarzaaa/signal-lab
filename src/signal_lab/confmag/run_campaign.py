@@ -305,10 +305,12 @@ def cmd_evaluate(args) -> None:
 
     # 95% MCS (reported, not a gate) on selected-row squared errors,
     # with the actual selected rows' t0s for the day-block bootstrap.
+    # (As a Series: the MCS helper calls .dt on its input.)
     mcs_out = None
     if se_frames:
         loss_df = pd.concat(se_frames, ignore_index=True)
-        t0_all = pd.to_datetime(np.concatenate(t0_selected_list))
+        t0_all = pd.Series(
+            pd.to_datetime(np.concatenate(t0_selected_list)))
         mcs_out = mcs_mod.mcs(loss_df, t0_all, log=_log)
 
     # DSR honesty metric (reported, not a gate): per-row MSE gains of
