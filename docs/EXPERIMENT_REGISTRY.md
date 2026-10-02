@@ -174,3 +174,36 @@ data/universe_vol.csv (102 tickers). Dev t0 <= 2026-06-30; test
 | TAILQ-VERDICT | 2026-10-02 | **NO-GO. Campaign DEAD per the frozen kill criterion (miss on pinball).** No test-period evaluation run (GO-gated; 1 labelable test row in any case). No confirmation data touched | docs/TAILQ_NEGATIVE_RESULT.md |
 
 **Tested-experiment count: 38** (37 + TAILQ-EVAL; TAILQ-BUILD is infra, TAILQ-VERDICT is the verdict).
+
+## DISPVOL campaign (CONFIRMATORY, pre-registered 2026-10-02)
+
+Pre-registration: `docs/DISPVOL_PREREGISTRATION.md` (frozen, binding;
+merged as PR #67, commit 1d8bbae). BET 1 (SPECULATIVE) from
+docs/SYNTHESIS_BETS.md: cross-sectional dispersion predicts individual
+realized volatility. Target: realized_vol_5d, same definition and frame
+as VOL (all ticker-days). Challenger: har_vix_disp = ridge (alpha=1.0,
+standardized; frozen, no selection) on the 34 frozen HAR+VIX features +
+6 frozen dispersion features (disp_level, disp_5d_change, disp_z60 over
+the 101 S&P 100 tickers ex SPY, 50-ticker minimum, 65-day burn-in, each
+also interacted with the stock's own rv_1d; 40 features total).
+Primary baseline: har_vix = ridge on the 34 HAR+VIX features alone (the
+HARVIX challenger definition, unchanged). Secondary baseline: garch11
+(same scale-corrected implementation as VOL/HARVIX). Metric: QLIKE
+primary with HAC-equivalent SEs, DM test, 95% MCS (reported, not a
+gate); MSE/MAE secondary; DSR honesty metric (reported, not a gate).
+Validation: 5-fold expanding purged walk-forward, seed 7, min_train 50,
+purge j==k, 5-trading-day embargo. GO iff mean paired QLIKE differential
+(har_vix minus challenger) > 0 AND 95% t CI lower bound > 0; NO-GO kills
+the campaign. Universe: frozen data/universe_vol.csv (102 tickers).
+Prices: yfinance 2022-01-01..2026-07-15 (reused VOL download). VIX:
+^VIX/^VIX3M reused from the HARVIX cache. No GDELT. Dev t0 <=
+2026-06-30; test 2026-07-01..2026-08-31 (GO-gated); confirmation never
+touched.
+
+| ID | Date (UTC) | Item | Result pointer |
+|---|---|---|---|
+| DISPVOL-BUILD | 2026-10-03 | Campaign build: `src/signal_lab/dispvol/` (frozen 6-feature dispersion leg with point-in-time construction, SPY exclusion, 50-ticker minimum, 65-day burn-in; run_campaign CLI reusing the VOL/HARVIX harness: frame, features, garch, metrics, splits, periods, MCS, DSR); 15 synthetic tests (dispersion math, SPY exclusion, ticker minimum, point-in-time truncation, no-future-cross-sectional-info, burn-in, interaction math, fail-loud guards, end-to-end walk-forward smoke, confirmation enforcement); no network in CI | PR #68 |
+| DISPVOL-EVAL | 2026-10-03 | Dev evaluation (VALID): 5-fold expanding purged walk-forward on 113,511 dev rows (6,444 NaN-feature rows dropped; 1,666 GARCH fallbacks / 89,167 test rows). Per-fold d = QLIKE(har_vix)-QLIKE(har_vix_disp): -0.001574, -0.001062, +0.002087, -2.756295, +0.027759. mean(d) = -0.545817, se = 0.552646, 95% t CI (df=4) [-2.080209, +0.988575]. DM stat -0.9876, p = 0.3792. Fold 4 is the same 2025-04-09 VIX-spike pathology as HARVIX; the dispersion challenger blows up harder (QLIKE 15.85 vs 13.09), consistent with dispersion being coincident not leading. Ex-fold-4 mean(d) = +0.006803, 95% CI [-0.015576, +0.029183], still straddling zero. Secondary vs garch11: mean(d2) = -3.104340, CI [-11.438817, +5.230137], DM p = 0.3595. 95% MCS: sole survivor garch11; har_vix_disp eliminated first (p=0.0002), then har_vix, then naive. DSR: both ridge arms likely_false_discovery = True. No deviations from the pre-registration -> **NO-GO** | docs/DISPVOL_NEGATIVE_RESULT.md; docs/dispvol_results.json |
+| DISPVOL-VERDICT | 2026-10-03 | **NO-GO. Campaign DEAD per the frozen kill criterion.** No test-period evaluation run (GO-gated). No confirmation data touched | docs/DISPVOL_NEGATIVE_RESULT.md |
+
+**Tested-experiment count: 39** (38 + DISPVOL-EVAL; DISPVOL-BUILD is infra, DISPVOL-VERDICT is the verdict).
