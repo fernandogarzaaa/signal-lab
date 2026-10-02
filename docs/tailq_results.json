@@ -1,0 +1,198 @@
+{
+  "verdict": "NO-GO",
+  "n_dev_rows": 1675,
+  "n_pooled_test_rows": 1396,
+  "caviar_fallbacks": 20,
+  "garch_hs_fallbacks": 26,
+  "folds": [
+    {
+      "fold": 1,
+      "test_start": "2022-11-17",
+      "test_end": "2023-08-03",
+      "n_train": 274,
+      "n_test": 284,
+      "n_purged": 5,
+      "n_embargoed": 0,
+      "pinball_lgbm_quantile": 0.005283431168576812,
+      "pinball_caviar": 0.004910995243280692,
+      "pinball_garch_hs": 0.0052516129495221945,
+      "pinball_naive": 0.004855697764276622,
+      "d_caviar_minus_challenger": -0.00037243592529612006
+    },
+    {
+      "fold": 2,
+      "test_start": "2023-08-07",
+      "test_end": "2024-04-30",
+      "n_train": 553,
+      "n_test": 282,
+      "n_purged": 10,
+      "n_embargoed": 0,
+      "pinball_lgbm_quantile": 0.009100575079985601,
+      "pinball_caviar": 0.008690474277235368,
+      "pinball_garch_hs": 0.00881585583734304,
+      "pinball_naive": 0.008507062662053158,
+      "d_caviar_minus_challenger": -0.00041010080275023265
+    },
+    {
+      "fold": 3,
+      "test_start": "2024-05-01",
+      "test_end": "2025-01-29",
+      "n_train": 829,
+      "n_test": 273,
+      "n_purged": 12,
+      "n_embargoed": 4,
+      "pinball_lgbm_quantile": 0.010134517695983539,
+      "pinball_caviar": 0.011819077172974549,
+      "pinball_garch_hs": 0.011746468355076126,
+      "pinball_naive": 0.011896330331174836,
+      "d_caviar_minus_challenger": 0.0016845594769910096
+    },
+    {
+      "fold": 4,
+      "test_start": "2025-01-30",
+      "test_end": "2025-10-21",
+      "n_train": 1088,
+      "n_test": 284,
+      "n_purged": 15,
+      "n_embargoed": 15,
+      "pinball_lgbm_quantile": 0.005698928372806062,
+      "pinball_caviar": 0.006338576140018795,
+      "pinball_garch_hs": 0.006795485214989823,
+      "pinball_naive": 0.006142625371980779,
+      "d_caviar_minus_challenger": 0.0006396477672127327
+    },
+    {
+      "fold": 5,
+      "test_start": "2025-10-22",
+      "test_end": "2026-06-24",
+      "n_train": 1361,
+      "n_test": 273,
+      "n_purged": 13,
+      "n_embargoed": 28,
+      "pinball_lgbm_quantile": 0.009251730730979452,
+      "pinball_caviar": 0.008961341164847144,
+      "pinball_garch_hs": 0.009525762115882788,
+      "pinball_naive": 0.009231403132374054,
+      "d_caviar_minus_challenger": -0.00029038956613230797
+    }
+  ],
+  "paired_t": {
+    "mean": 0.0002502561900050163,
+    "se": 0.00040773559946535176,
+    "df": 4,
+    "n": 5,
+    "ci_low": -0.0008817993193454477,
+    "ci_high": 0.0013823116993554804,
+    "stat": 0.6137707630463657,
+    "p": 0.5725544114375691
+  },
+  "dm_note": "paired-t form on fold means = DM with HAC collapsing on non-overlapping fold blocks; see tailq.metrics",
+  "coverage_challenger": {
+    "kupiec": {
+      "stat": 192.76163519919157,
+      "p": 7.935019558872927e-44,
+      "n": 1396,
+      "x": 208,
+      "rate": 0.1489971346704871,
+      "pass": false
+    },
+    "christoffersen_ind": {
+      "stat": 7.9925974112070435,
+      "p": 0.004696898502026658,
+      "n": 1396,
+      "counts": {
+        "n00": 1024,
+        "n01": 163,
+        "n10": 163,
+        "n11": 45
+      },
+      "pass": false
+    },
+    "conditional": {
+      "stat": 200.75423261039862,
+      "p": 2.5513631540102927e-44,
+      "pass": false,
+      "lr_uc": 192.76163519919157,
+      "lr_ind": 7.9925974112070435
+    }
+  },
+  "coverage_caviar": {
+    "kupiec": {
+      "stat": 147.00629952811346,
+      "p": 7.822653928271335e-34,
+      "n": 1396,
+      "x": 188,
+      "rate": 0.1346704871060172,
+      "pass": false
+    },
+    "christoffersen_ind": {
+      "stat": 16.03298370091693,
+      "p": 6.224854158268026e-05,
+      "n": 1396,
+      "counts": {
+        "n00": 1063,
+        "n01": 144,
+        "n10": 144,
+        "n11": 44
+      },
+      "pass": false
+    },
+    "conditional": {
+      "stat": 163.0392832290304,
+      "p": 3.948839480226982e-36,
+      "pass": false,
+      "lr_uc": 147.00629952811346,
+      "lr_ind": 16.03298370091693
+    }
+  },
+  "mcs": {
+    "survivors": [
+      "lgbm_quantile",
+      "caviar",
+      "naive"
+    ],
+    "eliminated": [
+      [
+        "garch_hs",
+        0.04319136172765447
+      ]
+    ],
+    "mcs_p": {
+      "lgbm_quantile": 0.6540691861627674,
+      "caviar": 0.6540691861627674,
+      "garch_hs": 0.04319136172765447,
+      "naive": 0.6540691861627674
+    },
+    "n_rows": 1396,
+    "n_models": 4,
+    "n_boot": 5000,
+    "alpha": 0.05,
+    "seed": 7
+  },
+  "dsr": [
+    {
+      "variant": "lgbm_quantile",
+      "sharpe": 0.025932145201587112,
+      "dsr": 0.1135883703372047,
+      "likely_false_discovery": true
+    },
+    {
+      "variant": "caviar",
+      "sharpe": -0.004814633725939626,
+      "dsr": 0.01123536152761909,
+      "likely_false_discovery": true
+    },
+    {
+      "variant": "garch_hs",
+      "sharpe": -0.10191073971516494,
+      "dsr": 1.3686467293500079e-08,
+      "likely_false_discovery": true
+    }
+  ],
+  "dsr_note": "per-row pinball gains over naive as pseudo-returns, freq=1; reported, not a gate",
+  "go_conjuncts": {
+    "pinball_win": false,
+    "challenger_passes_all_coverage": false,
+    "caviar_fails_at_least_one": true
+  }
+}

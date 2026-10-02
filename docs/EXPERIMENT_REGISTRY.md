@@ -133,3 +133,44 @@ data/universe_vol.csv (102 tickers). Dev t0 <= 2026-06-30; test
 | HARVIX-VERDICT | 2026-10-02 | **NO-GO. Campaign DEAD per the frozen kill criterion.** No test-period evaluation run (GO-gated). No confirmation data touched | docs/HARVIX_NEGATIVE_RESULT.md |
 
 **Tested-experiment count: 37** (36 + HARVIX-EVAL; HARVIX-BUILD is infra, HARVIX-VERDICT is the verdict).
+
+## TAILQ campaign (CONFIRMATORY, pre-registered 2026-10-02)
+
+Pre-registration: `docs/TAILQ_PREREGISTRATION.md` (frozen, binding;
+merged as PR #64, commit 7226bf9). Candidate C from
+docs/RESEARCH_SPRINT.md section 4: 5% conditional quantile of the
+3-day earnings event return. Event set: earnings announcements
+(yfinance get_earnings_dates, actuals only, t0 = earnings date mapped
+to next trading day; trailing top-decile |abn_ret| days rejected in
+the pre-reg because selecting on realized magnitude complicates
+coverage). Challenger: lgbm_quantile = LightGBM quantile regression
+(alpha=0.05, n_estimators=300, lr=0.05, leaves=15, min_child=40,
+feat_frac=0.8, bag_frac=0.8, l2=1.0, seed=7, deterministic) on 15
+frozen point-in-time features (HAR legs, pre-event returns, VIX
+level/change/slope, beta_252, surprise, prev_surprise, dow, SPY legs;
+frozen, no selection). Primary baseline: caviar = Engle-Manganelli
+(2004) symmetric absolute value CAViaR f_t = b1 + b2*f_{t-1} +
+b3*|r_{t-1}|, fit per (ticker, t0) by check-function minimization
+(differential_evolution seed 7 + Nelder-Mead polish) on trailing 252
+trading days, 1-day forecast scaled by sqrt(3) (frozen horizon
+adaptation). Secondary baseline: garch_hs = GARCH(1,1)-filtered
+historical simulation VaR (same sqrt(3) scaling); naive = trailing
+empirical 5% quantile x sqrt(3) (sanity). Metric: pinball loss at
+tau=0.05 PRIMARY; Kupiec unconditional coverage, Christoffersen
+independence + conditional coverage; 95% MCS (reported, not a gate);
+DSR honesty metric (reported, not a gate). Validation: 5-fold
+expanding purged walk-forward on t0, seed 7, min_train 50,
+horizon=3/embargo=3 trading days. GO iff mean paired pinball
+differential (caviar minus challenger) > 0 AND 95% t CI lower bound
+> 0 AND challenger passes all three coverage tests while CAViaR fails
+at least one; miss on pinball kills the campaign. Universe: frozen
+data/universe_vol.csv (102 tickers). Dev t0 <= 2026-06-30; test
+2026-07-01..2026-08-31 (GO-gated); confirmation never touched.
+
+| ID | Date (UTC) | Item | Result pointer |
+|---|---|---|---|
+| TAILQ-BUILD | 2026-10-02 | Campaign build: `src/signal_lab/tailq/` (event frame with 3-day event-return target reusing the EVENTVOL earnings pipeline; 15 frozen features; SAV CAViaR with DE + Nelder-Mead check-function fit; GARCH-filtered HS VaR reusing vol/garch.py; LightGBM quantile challenger with frozen hyperparams; pinball/Kupiec/Christoffersen metrics; walk-forward runner reusing splits/periods/MCS/universe/prices/VIX); 40 synthetic tests (pinball math, CAViaR recovery of known SAV params on synthetic data, point-in-time safety, no-confirmation enforcement, end-to-end walk-forward smoke); no network in CI | PR #65 |
+| TAILQ-EVAL | 2026-10-02 | Dev evaluation (VALID): 5-fold expanding purged walk-forward on 1,675 dev event rows (199 dropped for insufficient history; 20 CAViaR + 26 GARCH-HS naive fallbacks / 1,396 test rows). Per-fold d = pinball(caviar)-pinball(challenger): -0.000372, -0.000410, +0.001685, +0.000640, -0.000290. mean(d) = +0.000250, se = 0.000408, 95% t CI (df=4) [-0.000882, +0.001382]. DM stat +0.6138, p = 0.5726. Coverage (pooled 1,396 rows): challenger FAILS all three (Kupiec 192.76 p=0.0000; independence 7.99 p=0.0047; conditional 200.75 p=0.0000; violation rate 14.90% vs 5% expected); CAViaR FAILS all three (147.01 p=0.0000; 16.03 p=0.0001; 163.04 p=0.0000; 13.47%). All four arms over-violate 2.6-3x: earnings event tails dwarf daily-calibrated forecasts. 95% MCS: survivors {lgbm_quantile, caviar, naive}; garch_hs eliminated (p=0.0432). DSR: all three arms likely_false_discovery = True. Deterministic re-run reproduced every fold number exactly -> **NO-GO** | docs/TAILQ_NEGATIVE_RESULT.md; docs/tailq_results.json |
+| TAILQ-VERDICT | 2026-10-02 | **NO-GO. Campaign DEAD per the frozen kill criterion (miss on pinball).** No test-period evaluation run (GO-gated; 1 labelable test row in any case). No confirmation data touched | docs/TAILQ_NEGATIVE_RESULT.md |
+
+**Tested-experiment count: 38** (37 + TAILQ-EVAL; TAILQ-BUILD is infra, TAILQ-VERDICT is the verdict).
