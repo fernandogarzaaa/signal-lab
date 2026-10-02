@@ -31,6 +31,33 @@ the research program that left no committed trace are not counted.
 
 **Tested-experiment count: 30** (26 baseline + 4 gate-2).
 
+## VOL volatility campaign (CONFIRMATORY, pre-registered 2026-10-02)
+
+Pre-registration: `docs/VOL_PREREGISTRATION.md` (frozen, binding; merged
+as PR #51, commit e5569c6). Target: realized_vol_5d (sample std ddof=1
+of daily log returns over (t0, t0+5]). Baseline: GARCH(1,1) MLE on
+trailing 252 trading days, analytic 5-day term structure, naive fallback
+on fit failure (counted). Arms: ridge (alpha=1.0, standardized) and
+LightGBM (n_estimators=300, lr=0.05, leaves=31, min_child=100,
+feat_frac=0.8, bag_frac=0.8, l2=1.0, seed=7) on HAR-style point-in-time
+features + SPY legs. Metric: QLIKE on variance (primary); MSE-on-variance,
+MAE-on-vol, Diebold-Mariano (secondary). Validation: 5-fold expanding
+purged walk-forward, seed 7, min_train 50, purge j==k, 5-trading-day
+embargo. GO iff mean paired QLIKE differential > 0 AND 95% t CI lower
+bound > 0; NO-GO kills the campaign. Universe: S&P 100 (101, Wikipedia
+components as of 2026-09-21) + SPY = 102 tickers, frozen in
+`data/universe_vol.csv`. Prices: yfinance 2022-01-01..2026-07-15.
+
+| ID | Date (UTC) | Item | Result pointer |
+|---|---|---|---|
+| VOL-BUILD | 2026-10-02 | Campaign build: `src/signal_lab/vol/` (universe, prices, frame, features, garch, models, metrics, run_campaign CLI); 7 synthetic test files; no network in CI | PR (pending) |
+| VOL-SELECT | — | Single purged train/validation split in dev: ridge vs LightGBM on validation QLIKE; DSR reported (not a gate) | pending |
+| VOL-EVAL | — | 5-fold walk-forward champion vs garch11 vs naive; frozen GO/NO-GO verdict | docs/VOL_RESULTS.md (pending) |
+| VOL-TEXT | — | One GDELT probe; text arms skipped if throttled (no evasion) | pending |
+| VOL-VERDICT | — | GO: single authorized test eval; NO-GO: docs/VOL_NEGATIVE_RESULT.md, campaign dead | pending |
+
+**Tested-experiment count: 31** (30 + VOL-BUILD).
+
 ## Extraction program (APPLIED product improvements, 2026-10-01)
 
 The research program is CLOSED (see docs/PROGRAM_STATUS.md). The
