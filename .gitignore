@@ -25,3 +25,8 @@ npm-debug.log*
 .venv-ws2/
 .ws2-wheels/
 .ws2-tmp/
+
+# Build metadata
+*.egg-info/
+build/
+dist/
