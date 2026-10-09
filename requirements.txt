@@ -14,7 +14,7 @@ joblib>=1.3
 spacy>=3.7
 # M3 gradient-boosting challenger. If unavailable, the challenger row is
 # reported as skipped and the logistic-regression models still train.
-lightgbm>=4.0
+lightgbm>=4.7.0
 # M6 uses TF-IDF retrieval (no sentence-transformers needed).
 # TabPFN zero-tuning benchmark arm. Pinned to 2.0.6: the last release that
 # runs fully locally with no account (tabpfn>=2.5 needs a PriorLabs account
