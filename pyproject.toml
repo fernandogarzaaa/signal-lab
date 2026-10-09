@@ -20,7 +20,7 @@ dependencies = [
     "requests>=2.31",
     "beautifulsoup4>=4.12",
     "yfinance>=1.7.0",
-    "lightgbm>=4.0",
+    "lightgbm>=4.7.0",
 ]
 
 [project.optional-dependencies]
