@@ -253,7 +253,8 @@ function createApp() {
   });
 
   // Fallback to the dashboard for any other route.
-  app.get('*', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
+  // Express 5 (path-to-regexp v8) rejects the bare '*' wildcard; '/{*splat}' is the supported form.
+  app.get('/{*splat}', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
 
   // Workstream 3: background GDELT polling. GDELT refreshes roughly every
   // 15 minutes, so the default cadence matches it; polling faster buys
