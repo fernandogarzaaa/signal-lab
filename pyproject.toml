@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=84.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -12,14 +12,14 @@ requires-python = ">=3.10"
 # classifier. pandas stays <3 because the optional tabpfn==2.0.6 arm needs it.
 dependencies = [
     "pandas>=2.0,<3",
-    "numpy>=1.24",
+    "numpy>=2.2.6",
     "scikit-learn>=1.3",
     "scipy>=1.11",
     "duckdb>=0.9",
     "joblib>=1.3",
     "requests>=2.31",
     "beautifulsoup4>=4.12",
-    "yfinance>=0.2",
+    "yfinance>=1.7.0",
     "lightgbm>=4.7.0",
 ]
 
@@ -30,7 +30,7 @@ nlp = ["spacy>=3.7"]
 tabpfn = ["tabpfn==2.0.6"]
 # GDELT client runtime imports. gdelt-client itself must be installed with
 # --no-deps (its pandas>=3 pin conflicts with tabpfn): pip install --no-deps gdelt-client==0.2.2
-gdelt = ["aiohttp>=3.13.3", "tenacity>=9.1.3"]
+gdelt = ["aiohttp>=3.13.3", "tenacity>=9.1.4"]
 dev = ["pytest>=7.4"]
 
 [tool.setuptools.packages.find]

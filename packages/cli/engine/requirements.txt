@@ -1,9 +1,9 @@
 pandas>=2.0
-numpy>=1.24
+numpy>=2.5.3
 scikit-learn>=1.3
-scipy>=1.11
+scipy>=1.18.1
 duckdb>=0.9
-yfinance>=0.2
+yfinance>=1.7.0
 requests>=2.31
 beautifulsoup4>=4.12
 pytest>=7.4
@@ -14,7 +14,7 @@ pytest>=7.4
 # Production scorer dependency (0.5.0): the shipped model.pkl is a
 # LightGBM classifier. Without this, joblib.load(model.pkl) fails and the
 # monitor cannot score articles. Not optional for the shipped artifact.
-lightgbm>=4.0
+lightgbm>=4.7.0
 # TabPFN zero-tuning benchmark arm (item 3). Pinned to 2.0.6: the last
 # release that runs fully locally with no account. tabpfn>=2.5 requires a
 # PriorLabs account and TABPFN_TOKEN (browser login), which is
