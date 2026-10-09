@@ -14,7 +14,7 @@ pytest>=7.4
 # Production scorer dependency (0.5.0): the shipped model.pkl is a
 # LightGBM classifier. Without this, joblib.load(model.pkl) fails and the
 # monitor cannot score articles. Not optional for the shipped artifact.
-lightgbm>=4.0
+lightgbm>=4.7.0
 # TabPFN zero-tuning benchmark arm (item 3). Pinned to 2.0.6: the last
 # release that runs fully locally with no account. tabpfn>=2.5 requires a
 # PriorLabs account and TABPFN_TOKEN (browser login), which is
