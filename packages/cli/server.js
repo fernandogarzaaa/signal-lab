@@ -41,6 +41,12 @@ function createApp() {
 
   const jobs = createJobManager();
 
+  // Lightweight liveness probe for the deploy cron and external monitors.
+  // Deliberately dependency-free: answers even when the engine venv is missing.
+  app.get('/api/health', (req, res) => {
+    res.json({ ok: true, service: 'signal-lab', time: new Date().toISOString() });
+  });
+
   app.get('/api/status', (req, res) => {
     const stages = {};
     for (const s of STAGES) stages[s] = { ...STAGE_META[s] && { title: STAGE_META[s].title }, ...stageState(s) };

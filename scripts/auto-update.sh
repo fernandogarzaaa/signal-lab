@@ -44,6 +44,17 @@ fi
 LOCAL="$(git rev-parse HEAD)"
 REMOTE="$(git rev-parse "origin/$BRANCH")"
 if [ "$LOCAL" = "$REMOTE" ]; then
+  # No new code to deploy, but self-heal: a crashed service stays down
+  # until the next commit unless we restart it here.
+  if ! curl -sf -o /dev/null --max-time 3 "http://127.0.0.1:${PORT}/api/health"; then
+    log "service $SERVICE unhealthy on port $PORT, restarting"
+    if sudo -n systemctl restart "$SERVICE" 2>/dev/null; then
+      log "service $SERVICE restarted by self-heal"
+    else
+      log "ERROR: self-heal restart of $SERVICE failed (needs passwordless sudo)"
+      exit 1
+    fi
+  fi
   exit 0
 fi
 
@@ -71,7 +82,7 @@ log "service $SERVICE restarted"
 
 # Health check: dashboard must answer 200 on 127.0.0.1 within 30s.
 for i in $(seq 1 30); do
-  if curl -sf -o /dev/null --max-time 3 "http://127.0.0.1:${PORT}/"; then
+  if curl -sf -o /dev/null --max-time 3 "http://127.0.0.1:${PORT}/api/health"; then
     log "healthy on port $PORT after ${i}s"
     exit 0
   fi
