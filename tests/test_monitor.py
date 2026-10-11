@@ -321,3 +321,32 @@ def test_score_new_articles_rejects_unknown_feature_space(tmp_store, monkeypatch
     }]
     with pytest.raises(ValueError, match="unknown feature space"):
         monitor.score_new_articles(items, "AAPL", log=lambda *a, **k: None)
+
+
+def test_pre_ctx_model_scores_without_price_history(tmp_store, monkeypatch):
+    """A pre-ctx model must score articles even when context features are
+    NaN (e.g. articles published before enough price history exists).
+    The model never sees those features, so gating on them silently
+    dropped scoreable articles."""
+    from signal_lab.models.lexicon import LEXICON_FEATURE_NAMES
+
+    vec, model, name = _fake_scorer(0, tmp_store)  # placeholder
+    n_base = len(vec.vocabulary_) + len(LEXICON_FEATURE_NAMES)
+    vec, model, name = _fake_scorer(n_base, tmp_store)
+    monkeypatch.setattr(monitor, "load_scorer", lambda: (vec, model, name))
+    monkeypatch.setattr(monitor, "_read_prices", lambda tickers: pd.DataFrame())
+    # All-NaN context: no pre-publication price history at all.
+    monkeypatch.setattr(
+        monitor, "build_context_features",
+        lambda df, prices, benchmark=None, log=print: pd.DataFrame(
+            {c: [float("nan")] for c in monitor.CONTEXT_FEATURE_NAMES},
+            index=df.index,
+        ),
+    )
+    items = [{
+        "title": "Apple earnings beat", "body_snippet": "",
+        "url": "http://x/9", "published_at": datetime.now(timezone.utc),
+    }]
+    out = monitor.score_new_articles(items, "AAPL", log=lambda *a, **k: None)
+    assert out["proba"].notna().all()
+    assert "without context features" in out["score_note"].iloc[0]

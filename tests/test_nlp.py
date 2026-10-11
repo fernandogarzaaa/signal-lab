@@ -26,7 +26,11 @@ def test_ambiguous_alias_low_confidence_without_context():
 
 def test_ner_extracts_org():
     pytest.importorskip("spacy", reason="spaCy is an optional dependency")
-    hits = extract_ner("Microsoft and Nvidia announced a chip partnership")
+    try:
+        hits = extract_ner("Microsoft and Nvidia announced a chip partnership")
+    except RuntimeError as exc:
+        pytest.skip(f"spaCy model not installed ({exc}); "
+                    "run 'python -m spacy download en_core_web_sm'")
     tickers = {t for _, t, _ in hits}
     assert {"MSFT", "NVDA"} <= tickers
 
@@ -48,3 +52,14 @@ def test_gate2_universe_tickers_resolve():
     hits = extract_baseline("Berkshire Hathaway and AT&T reported earnings; Citigroup shares fell")
     tickers = {t for _, t, _ in hits}
     assert {"BRK-B", "T", "C"} <= tickers
+
+
+def test_tower_company_aliases_resolve():
+    # SpaceX/Grain 800 MHz deal (Oct 2026): CCI/AMT/SBAC must resolve so the
+    # M3 ticker attribution and the event study can see tower-company news.
+    hits = extract_baseline(
+        "Crown Castle (CCI) and American Tower rose as SBA Communications "
+        "gained; SBAC shares climbed on the SpaceX spectrum deal"
+    )
+    tickers = {t for _, t, _ in hits}
+    assert {"CCI", "AMT", "SBAC"} <= tickers

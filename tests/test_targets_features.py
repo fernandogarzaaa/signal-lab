@@ -275,7 +275,16 @@ def test_excess_matches_forward_cumulative_abnormal():
 def test_excess_3d_equals_abn_ret_real_data():
     from signal_lab.models.build_and_train import build_dataset
 
-    df, _ = build_dataset(log=lambda *a, **k: None)
+    try:
+        df, _ = build_dataset(log=lambda *a, **k: None)
+    except ValueError as exc:
+        # A DB exists but holds no labelable rows (e.g. a thin or
+        # different-ticker corpus): the identity under test needs real
+        # labeled rows, so skip instead of failing. The "[labels]" prefix
+        # marks the known empty-corpus error from models/labels.py.
+        if "[labels] no labeled rows" in str(exc):
+            pytest.skip(f"DB has no labelable rows ({exc})")
+        raise
     assert len(df) > 0
     assert (df["target_version"] == TARGET_SET_VERSION).all()
     for c in target_column_names(TargetConfig().validated()) + PRICE_FEATURE_NAMES:

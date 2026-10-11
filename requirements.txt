@@ -22,3 +22,13 @@ lightgbm>=4.7.0
 # hub>=1.31 at runtime); if you also need transformers (FinBERT path),
 # install tabpfn with --no-deps after upgrading the hub.
 tabpfn==2.0.6
+# gdelt-client (GDELT DOC API): maintained client replacing the hand-rolled
+# requests loop in signal_lab.ingest.fetch_news. Code-health migration only;
+# it does not change GDELT's rate limits.
+# NOT listed here as a pinned requirement because every released gdelt-client
+# pins pandas>=3.0.0, which conflicts with tabpfn==2.0.6 (pandas<3) and breaks
+# pip resolution. Install with --no-deps (same step as .github/workflows/ci.yml
+# and the README from-source instructions); the DOC article_search path we use
+# only needs pandas DataFrame basics and is verified on pandas 2.x:
+#   pip install --no-deps gdelt-client==0.2.2
+#   pip install "aiohttp>=3.13.3" "tenacity>=9.1.4"

@@ -28,6 +28,9 @@ UNIVERSE = {
     "JPM": "JPMorgan",
     "XOM": "Exxon",
     "JNJ": "Johnson & Johnson",
+    "CCI": "Crown Castle",
+    "AMT": "American Tower",
+    "SBAC": "SBA Communications",
 }
 
 QUERY_TEMPLATE = ('("{company} stock" OR "{company} shares" OR "{company} earnings" '
