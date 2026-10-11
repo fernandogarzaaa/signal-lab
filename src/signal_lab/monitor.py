@@ -244,20 +244,21 @@ def score_new_articles(items: list[dict], queried: str, log=print) -> pd.DataFra
             f"{len(CONTEXT_FEATURE_NAMES)}): unknown feature space; "
             f"retrain the model or fix the artifact"
         )
-    if not use_ctx:
+    if use_ctx:
+        prices = _read_prices(sorted(set(df["ticker"]) | {BENCHMARK}))
+        ctx = build_context_features(df, prices, benchmark=BENCHMARK, log=log)
+        # The context-completeness gate only applies when the model actually
+        # consumes context features.
+        score_ok = ~ctx[CONTEXT_FEATURE_NAMES].isna().any(axis=1)
+    else:
         log(f"[monitor] model trained without context features "
-            f"({n_expected} feats); scoring on TF-IDF+lexicon only")
-
-    prices = _read_prices(sorted(set(df["ticker"]) | {BENCHMARK}))
-    ctx = build_context_features(df, prices, benchmark=BENCHMARK, log=log)
-    ctx_ok = ~ctx[CONTEXT_FEATURE_NAMES].isna().any(axis=1)
-
-    # The context-completeness gate only applies when the model actually
-    # consumes context features. A pre-ctx model scores on TF-IDF+lexicon
-    # alone: requiring pre-publication price history would silently drop
-    # scoreable articles (e.g. everything published in the first days of
-    # a fresh price backfill).
-    score_ok = ctx_ok if use_ctx else pd.Series(True, index=df.index)
+            f"({n_expected} feats); scoring on TF-IDF+lexicon only, "
+            f"independent of price data")
+        # A pre-ctx model scores on TF-IDF+lexicon alone: requiring
+        # pre-publication price history would silently drop scoreable
+        # articles (e.g. everything published in the first days of a fresh
+        # price backfill).
+        ctx, score_ok = None, pd.Series(True, index=df.index)
 
     proba = pd.Series(float("nan"), index=df.index)
     note = pd.Series("", index=df.index)

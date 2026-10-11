@@ -29,6 +29,10 @@ def test_ner_extracts_org():
     try:
         hits = extract_ner("Microsoft and Nvidia announced a chip partnership")
     except RuntimeError as exc:
+        # Skip only for the documented missing-model case; real extraction
+        # failures must fail the test.
+        if "en_core_web_sm" not in str(exc):
+            raise
         pytest.skip(f"spaCy model not installed ({exc}); "
                     "run 'python -m spacy download en_core_web_sm'")
     tickers = {t for _, t, _ in hits}
