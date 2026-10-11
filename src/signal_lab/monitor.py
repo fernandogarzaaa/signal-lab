@@ -244,30 +244,38 @@ def score_new_articles(items: list[dict], queried: str, log=print) -> pd.DataFra
             f"{len(CONTEXT_FEATURE_NAMES)}): unknown feature space; "
             f"retrain the model or fix the artifact"
         )
-    if not use_ctx:
+    if use_ctx:
+        prices = _read_prices(sorted(set(df["ticker"]) | {BENCHMARK}))
+        ctx = build_context_features(df, prices, benchmark=BENCHMARK, log=log)
+        # The context-completeness gate only applies when the model actually
+        # consumes context features.
+        score_ok = ~ctx[CONTEXT_FEATURE_NAMES].isna().any(axis=1)
+    else:
         log(f"[monitor] model trained without context features "
-            f"({n_expected} feats); scoring on TF-IDF+lexicon only")
-
-    prices = _read_prices(sorted(set(df["ticker"]) | {BENCHMARK}))
-    ctx = build_context_features(df, prices, benchmark=BENCHMARK, log=log)
-    ctx_ok = ~ctx[CONTEXT_FEATURE_NAMES].isna().any(axis=1)
+            f"({n_expected} feats); scoring on TF-IDF+lexicon only, "
+            f"independent of price data")
+        # A pre-ctx model scores on TF-IDF+lexicon alone: requiring
+        # pre-publication price history would silently drop scoreable
+        # articles (e.g. everything published in the first days of a fresh
+        # price backfill).
+        ctx, score_ok = None, pd.Series(True, index=df.index)
 
     proba = pd.Series(float("nan"), index=df.index)
     note = pd.Series("", index=df.index)
-    if ctx_ok.any():
-        dense = ctx.loc[ctx_ok, CONTEXT_FEATURE_NAMES] if use_ctx else None
+    if score_ok.any():
+        dense = ctx.loc[score_ok, CONTEXT_FEATURE_NAMES] if use_ctx else None
         X = featurize(
-            make_text(df[ctx_ok]),
+            make_text(df[score_ok]),
             vec,
             dense_extra=dense,
         )
-        proba.loc[ctx_ok] = model.predict_proba(X)[:, 1]
+        proba.loc[score_ok] = model.predict_proba(X)[:, 1]
     if not use_ctx:
-        note.loc[ctx_ok] = "scored without context features (model trained pre-ctx)"
-    note.loc[~ctx_ok] = "unscored: insufficient pre-publication price history"
+        note.loc[score_ok] = "scored without context features (model trained pre-ctx)"
+    note.loc[~score_ok] = "unscored: insufficient pre-publication price history"
     log(
-        f"[monitor] scored {int(ctx_ok.sum())}/{len(df)} "
-        f"({int((~ctx_ok).sum())} unscored)"
+        f"[monitor] scored {int(score_ok.sum())}/{len(df)} "
+        f"({int((~score_ok).sum())} unscored)"
     )
     df["proba"] = proba
     df["score_note"] = note

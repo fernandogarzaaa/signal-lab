@@ -60,3 +60,17 @@ def test_sanitize_json_importable_from_ingest_run():
     from signal_lab.ingest import run as run_mod
 
     assert callable(run_mod.sanitize_json)
+
+
+def test_universe_maps_tower_tickers_to_company_names():
+    # --tickers CCI,AMT,SBAC must build GDELT queries from company names,
+    # not bare ticker symbols, so news recall covers "Crown Castle" etc.
+    from signal_lab.ingest import run as run_mod
+
+    assert run_mod.UNIVERSE["CCI"] == "Crown Castle"
+    assert run_mod.UNIVERSE["AMT"] == "American Tower"
+    assert run_mod.UNIVERSE["SBAC"] == "SBA Communications"
+    q = run_mod.QUERY_TEMPLATE.format(
+        company=run_mod.UNIVERSE["CCI"], ticker="CCI")
+    assert '"Crown Castle stock"' in q and '"CCI shares"' in q
+    assert "sourcelang:english" in q

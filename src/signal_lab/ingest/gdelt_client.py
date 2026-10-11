@@ -36,8 +36,22 @@ import sys
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
-from gdelt_client import Filters, GdeltClient
-from gdelt_client.errors import RateLimitError
+
+try:
+    from gdelt_client import Filters, GdeltClient
+    from gdelt_client.errors import RateLimitError
+except ImportError as exc:
+    raise ImportError(
+        "signal_lab.ingest needs the 'gdelt-client' package, which is not "
+        "installed in this environment. Install it with:\n"
+        "  pip install --no-deps gdelt-client==0.2.2\n"
+        "  pip install 'aiohttp>=3.13.3' 'tenacity>=9.1.4'\n"
+        "The --no-deps flag is required: gdelt-client's pandas>=3 metadata "
+        "pin conflicts with tabpfn==2.0.6 (pandas<3) and breaks pip "
+        "resolution. The DOC article_search path used here only needs "
+        "pandas DataFrame basics and is verified on pandas 2.x. "
+        "(Same install step as .github/workflows/ci.yml.)"
+    ) from exc
 
 # Strict template: ("phrase1" OR "phrase2" ...) sourcelang:xx
 _TEMPLATE_RE = re.compile(r'^\("([^"]+)"((?: OR "[^"]+")*)\) sourcelang:([A-Za-z]+)$')

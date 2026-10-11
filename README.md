@@ -85,6 +85,11 @@ Or from source:
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+# GDELT news client (kept out of requirements.txt: its pandas>=3 metadata
+# pin conflicts with tabpfn==2.0.6 (pandas<3) and breaks pip resolution;
+# --no-deps is safe here, the DOC path used is verified on pandas 2.x)
+pip install --no-deps gdelt-client==0.2.2
+pip install "aiohttp>=3.13.3" "tenacity>=9.1.4"
 pip install -e .
 python -m signal_lab.ingest.run --tickers AAPL,MSFT,JPM --days 90
 pytest tests/
