@@ -179,6 +179,12 @@ function createJobManager() {
 
   function get(id) { return jobs.get(id); }
 
+  /** The job currently running, if any (the server runs one stage at a time). */
+  function running() {
+    for (const job of jobs.values()) if (job.status === 'running') return job;
+    return null;
+  }
+
   function summary(job) {
     return {
       job_id: job.id, stage: job.stage, status: job.status,
@@ -188,7 +194,7 @@ function createJobManager() {
     };
   }
 
-  return { start, get, summary, STAGES, STAGE_META };
+  return { start, get, running, summary, STAGES, STAGE_META };
 }
 
 module.exports = { STAGES, STAGE_META, runStage, extractJson, createJobManager };

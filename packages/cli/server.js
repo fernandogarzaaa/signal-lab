@@ -34,6 +34,32 @@ function stageState(stage) {
   }
 }
 
+const TICKER_RE = /^[A-Z0-9.\-]{1,8}$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * The HTTP API only accepts the one extra flag the dashboard sends:
+ * `--event '{"ticker":"AAPL","date":"2026-09-15"}'` for the RAG stage.
+ * Anything else is rejected so a remote caller cannot pass arbitrary
+ * argv (paths, ticker lists, day ranges) to the engine on a shared box.
+ * The CLI (`signallab run`) is unaffected.
+ */
+function sanitizeStageArgs(raw) {
+  if (raw === undefined || raw === null) return { args: [] };
+  if (!Array.isArray(raw)) return { error: 'args must be an array' };
+  if (raw.length === 0) return { args: [] };
+  if (raw.length !== 2 || raw[0] !== '--event') {
+    return { error: 'only ["--event", "{\"ticker\":..,\"date\":..}"] is accepted' };
+  }
+  let ev;
+  try { ev = JSON.parse(String(raw[1])); } catch { return { error: 'bad --event: not JSON' }; }
+  const ticker = String((ev && ev.ticker) || '').toUpperCase().trim();
+  const date = String((ev && ev.date) || '').trim();
+  if (!TICKER_RE.test(ticker)) return { error: 'bad --event ticker' };
+  if (!DATE_RE.test(date)) return { error: 'bad --event date: use YYYY-MM-DD' };
+  return { args: ['--event', JSON.stringify({ ticker, date })] };
+}
+
 function createApp() {
   const app = express();
   app.use(express.json({ limit: '1mb' }));
@@ -67,8 +93,13 @@ function createApp() {
     if (!venvExists()) {
       return res.status(400).json({ error: 'engine not set up — run `signallab setup` first' });
     }
-    const extraArgs = Array.isArray(req.body && req.body.args) ? req.body.args.map(String) : [];
-    const job = jobs.start(stage, extraArgs);
+    const parsed = sanitizeStageArgs(req.body && req.body.args);
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    const busy = jobs.running();
+    if (busy) {
+      return res.status(409).json({ error: `a ${busy.stage} run is already in progress`, job_id: busy.id });
+    }
+    const job = jobs.start(stage, parsed.args);
     res.json({ job_id: job.id, stage, status: job.status });
   });
 
@@ -216,19 +247,27 @@ function createApp() {
   // Fire-and-forget engine run: a poll cycle takes minutes (GDELT + bodies
   // + scoring), so the HTTP response returns immediately and the dashboard
   // reads the fresh state from /api/watchlist afterwards.
+  let pollInFlight = false;
   function runMonitorPoll() {
+    if (pollInFlight) {
+      console.log('[monitor] poll already running, skipping');
+      return false;
+    }
+    pollInFlight = true;
     const child = spawn(venvPython(), ['-m', 'signal_lab.monitor', '--poll', '--json'],
       { cwd: PKG_ROOT, env: { ...process.env, PYTHONPATH: ENGINE_DIR } });
     let err = '';
     child.stderr.on('data', (d) => { err += d; });
-    child.on('error', (e) => console.log(`[monitor] failed to start poll: ${e.message}`));
+    child.on('error', (e) => { pollInFlight = false; console.log(`[monitor] failed to start poll: ${e.message}`); });
     child.on('close', (code) => {
+      pollInFlight = false;
       if (code !== 0) {
         console.log(`[monitor] poll exited with code ${code}: ${String(err).split('\n').filter(Boolean).slice(-5).join(' | ').slice(0, 500)}`);
       } else {
         console.log('[monitor] background poll finished');
       }
     });
+    return true;
   }
 
   app.get('/api/watchlist', (req, res) => {
@@ -254,7 +293,9 @@ function createApp() {
     if (!venvExists()) {
       return res.status(400).json({ error: 'engine not set up — run `signallab setup` first' });
     }
-    runMonitorPoll();
+    if (!runMonitorPoll()) {
+      return res.status(409).json({ ok: false, error: 'a poll is already running; refresh /api/watchlist shortly' });
+    }
     res.status(202).json({ ok: true, message: 'poll started in the background; refresh /api/watchlist for the fresh state' });
   });
 
@@ -303,4 +344,4 @@ if (require.main === module) {
   console.log('(server.js run directly; the signallab CLI opens the browser for you)');
 }
 
-module.exports = { createApp, start };
+module.exports = { createApp, start, sanitizeStageArgs };
