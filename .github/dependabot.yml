@@ -8,6 +8,11 @@ updates:
     directory: /packages/cli/engine
     schedule:
       interval: weekly
+    ignore:
+      # tabpfn >= 2.5 (incl. 9.x) downloads gated weights that need a license token;
+      # the engine deliberately pins tabpfn==2.0.6 (see PR #88).
+      - dependency-name: "tabpfn"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
   - package-ecosystem: npm
     directory: /packages/cli
     schedule:
