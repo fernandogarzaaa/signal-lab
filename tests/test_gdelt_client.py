@@ -21,11 +21,20 @@ from datetime import datetime, timezone
 import pandas as pd
 import pytest
 
-from gdelt_client import Filters
-from gdelt_client.errors import RateLimitError
+# gdelt-client is not declared in any extra: every release pins pandas>=3, which
+# conflicts with tabpfn==2.0.6 (pandas<3), so it is installed separately with
+# `pip install --no-deps gdelt-client==0.2.2` (see pyproject.toml / CI). Skip this
+# module on a plain `pip install -e .[dev]` instead of breaking collection.
+pytest.importorskip(
+    "gdelt_client",
+    reason="gdelt-client not installed (pip install --no-deps gdelt-client==0.2.2 plus the [gdelt] extra)",
+)
 
-from signal_lab.ingest import gdelt_client as gc
-from signal_lab.ingest import widen
+from gdelt_client import Filters  # noqa: E402
+from gdelt_client.errors import RateLimitError  # noqa: E402
+
+from signal_lab.ingest import gdelt_client as gc  # noqa: E402
+from signal_lab.ingest import widen  # noqa: E402
 
 
 QUERY = ('("Apple stock" OR "Apple shares" OR "Apple earnings" '
@@ -157,6 +166,40 @@ def test_retry_backoff_config_passed_to_client():
     # Politeness posture carried over from the old hand-rolled loop.
     assert _FakeClient.last_kwargs["retry_backoff_base"] == gc.BACKOFF_BASE_S
     assert _FakeClient.last_kwargs["retry_max_wait"] == gc.BACKOFF_MAX_S
+
+
+def test_default_retry_and_backoff_values():
+    # Defaults are part of the politeness contract with the GDELT API.
+    gc.fetch_news_via_client(
+        QUERY, "2026-01-01", "2026-01-31",
+        _client_factory=lambda **kw: _FakeClient(_df=pd.DataFrame(), **kw))
+    assert _FakeClient.last_kwargs["max_retries"] == 5
+    assert _FakeClient.last_kwargs["retry_backoff_base"] == 15
+    assert _FakeClient.last_kwargs["retry_max_wait"] == 120
+
+
+def test_parse_gdelt_dt_rejects_malformed_values():
+    assert gc._parse_gdelt_dt("not-a-date") is None
+    assert gc._parse_gdelt_dt("") is None
+    assert gc._parse_gdelt_dt(None) is None
+
+
+def test_fetch_bodies_false_never_calls_snippet_fn():
+    calls = []
+    fake = _FakeClient(_df=_article_df())
+    metas = gc.fetch_news_via_client(
+        QUERY, "2026-01-01", "2026-01-31", fetch_bodies=False,
+        _fetch_snippet=lambda url: calls.append(url) or "x",
+        _client_factory=lambda **kw: fake)
+    assert calls == []
+    assert metas[0]["body_snippet"] == ""
+
+
+def test_fetch_none_result_returns_empty_list():
+    fake = _FakeClient(_df=None)
+    assert gc.fetch_news_via_client(
+        QUERY, "2026-01-01", "2026-01-31",
+        _client_factory=lambda **kw: fake) == []
 
 
 def test_rate_limit_surfaces_as_explicit_fetch_log_error(tmp_path, monkeypatch):
