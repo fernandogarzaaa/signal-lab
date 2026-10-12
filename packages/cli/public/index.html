@@ -145,7 +145,7 @@
   <div class="panel" style="margin-top:16px">
     <h3>RAG explainer — cited 10-K context for an event</h3>
     <div class="rag-controls">
-      <select id="rag-event"><option value="">Run the event study first, then pick an event&hellip;</option></select>
+      <select id="rag-event" aria-label="Event to explain"><option value="">Run the event study first, then pick an event&hellip;</option></select>
       <button id="btn-explain">Explain</button>
     </div>
     <div id="rag-out"><div class="empty">Run the RAG stage (or pick an event and press Explain) to generate a cited explanation.</div></div>
@@ -155,8 +155,8 @@
   <div class="panel">
     <p class="dim" style="margin:0 0 12px">Signal Lab explains past moves; it does not predict future ones. Sentiment model PR-AUC 0.127 on purged walk-forward (see Model diagnostics).</p>
     <div class="rag-controls">
-      <input id="mv-ticker" placeholder="Ticker (e.g. MSFT)" maxlength="6" style="width:150px;text-transform:uppercase">
-      <input id="mv-date" type="date" value="2026-01-29">
+      <input id="mv-ticker" aria-label="Ticker" placeholder="Ticker (e.g. MSFT)" maxlength="6" style="width:150px;text-transform:uppercase">
+      <input id="mv-date" type="date" aria-label="Date of the move" value="2026-01-29">
       <button id="btn-move" class="primary">Explain the move</button>
     </div>
     <div id="move-out"><div class="empty">Pick a ticker and a date to see the price move, the news drivers, and cited 10-K context.</div></div>
@@ -174,7 +174,7 @@
   <h2 style="margin-top:32px">Watchlist <span style="text-transform:none;letter-spacing:0">(near-real-time GDELT monitor)</span></h2>
   <div class="panel">
     <div class="rag-controls">
-      <input id="wl-add" placeholder="Add ticker (e.g. NVDA)" maxlength="8" style="width:160px;text-transform:uppercase">
+      <input id="wl-add" aria-label="Ticker to add to the watchlist" placeholder="Add ticker (e.g. NVDA)" maxlength="8" style="width:160px;text-transform:uppercase">
       <button id="btn-wl-add">Add</button>
       <button id="btn-wl-refresh">Refresh</button>
       <button id="btn-wl-poll" class="primary">Check now</button>

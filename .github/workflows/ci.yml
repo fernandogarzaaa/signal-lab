@@ -43,6 +43,11 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "20"
+      - name: Server tests
+        run: |
+          cd packages/cli
+          npm ci --no-audit --no-fund
+          npm test
       - name: Pack npm tarball
         run: |
           cd packages/cli
