@@ -16,6 +16,9 @@ from signal_lab.models import tabpfn_arm as ta
 from signal_lab.models.labels import LabelConfig
 from signal_lab.validation import splits
 
+# Optional dependency: skip this whole module when tabpfn is not installed.
+pytest.importorskip("tabpfn")
+
 
 def _blobs(n: int = 200, d: int = 20, seed: int = 0):
     rng = np.random.default_rng(seed)
