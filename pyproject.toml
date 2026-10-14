@@ -25,7 +25,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # spaCy NER upgrade (extract_ner); also run: python -m spacy download en_core_web_sm
-nlp = ["spacy>=3.7"]
+nlp = ["spacy>=3.8.16"]
 # TabPFN benchmark arm. Heavy: pulls torch (and CUDA wheels on Linux).
 tabpfn = ["tabpfn==2.0.6"]
 # GDELT client runtime imports. gdelt-client itself must be installed with
